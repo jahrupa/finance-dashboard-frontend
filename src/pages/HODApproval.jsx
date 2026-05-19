@@ -41,7 +41,7 @@ export default function HODApproval() {
       }
 
       // Optional: refresh invoices after action
-      fetchInvoices();
+      fetchHodInvoices();
 
       // Reset modal state
       setSelected(null);

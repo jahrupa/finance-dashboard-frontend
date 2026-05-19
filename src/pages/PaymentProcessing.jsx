@@ -26,7 +26,8 @@ export default function PaymentProcessing() {
       alert(error);
     }
     // processPayment(selected.id, bankRef);
-    fetchPaymentApprovalInvoices();
+    const response = await fetchPaymentApprovalInvoices();
+    setInvoices(response?.data || []);
     setSelected(null);
     setBankRef("");
   };

@@ -4,7 +4,7 @@ import { fetchFinanceInvoices, financeAccept, financeHold, financePending, finan
 import { useEffect } from "react";
 
 export default function FinanceReview() {
-  const { financeAction, getDaysPending, getAgingBucket } =
+  const { getDaysPending, } =
     useInvoices();
   const [selected, setSelected] = useState(null);
   const [action, setAction] = useState(null); // "Accept" | "Reject" | "Hold"
@@ -27,7 +27,6 @@ export default function FinanceReview() {
     filter === "all"
       ? invoices
       : invoices.filter((i) => i.status === "Pending Review");
-console.log(displayInvoices,'displayInvoices')
   const openAction = (inv, act) => {
     setSelected(inv);
     setAction(act);
@@ -246,41 +245,41 @@ console.log(displayInvoices,'displayInvoices')
                       <td>
                         {/* {isPending ? ( */}
                         <div className="action-row">
-                          {inv.financeStatus !== "Accepted" && (
+                          {/* {inv.financeStatus !== "Accepted" && ( */}
                             <button
                               className="btn btn-success btn-sm"
                               onClick={() => openAction(inv, "Accept")}
                             >
                               ✅ Accept
                             </button>
-                          )}
+                          {/* )} */}
 
-                          {inv.financeStatus !== "Rejected" && (
+                          {/* {inv.financeStatus !== "Rejected" && ( */}
                             <button
                               className="btn btn-danger btn-sm"
                               onClick={() => openAction(inv, "Reject")}
                             >
                               ❌ Reject
                             </button>
-                          )}
+                          {/* )} */}
 
-                          {inv.financeStatus !== "Hold" && (
+                          {/* {inv.financeStatus !== "Hold" && ( */}
                             <button
                               className="btn btn-warning btn-sm"
                               onClick={() => openAction(inv, "Hold")}
                             >
                               ⏸ Hold
                             </button>
-                          )}
+                          {/* )} */}
 
-                          {inv.status !== "Pending Review" && (
+                          {/* {inv.status !== "Pending Review" && (
                             <button
                               className="btn btn-primary btn-sm"
                               onClick={() => openAction(inv, "Pending")}
                             >
                               🔄 Pending
                             </button>
-                          )}
+                          )} */}
                         </div>
                         {/* ) : (
                           <span

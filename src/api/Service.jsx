@@ -1,5 +1,7 @@
 import API from "./axios";
 import {
+  AUTH_LOGIN,
+  AUTH_REGISTER,
   DASHBOARD_KPIS,
   FINANCE_ACCEPT,
   FINANCE_HOLD,
@@ -30,7 +32,13 @@ import {
   USER_ME,
   CHANGE_PASSWORD,
   FINANCE_PENDING,
-  PA_SEND_BACK
+  PA_SEND_BACK,
+  DOWNLOAD_DOCUMENT,
+  USER_ACCESS,
+  USER_ACCESS_BY_ID,
+  UPDATE_USER_ACCESS,
+  DELETE_USER_ACCESS,
+  CREATE_USER_ACCESS
 } from "./endpoints";
 
 export const fetchDashboardKpis = async () => {
@@ -61,7 +69,21 @@ export const fetchInvoices = async ({
     throw error.response?.data?.error || "Failed to fetch invoices";
   }
 };
+// FIXED DOWNLOAD SERVICE
+export const downloadFile = async (invoiceId, fileName) => {
+  try {
+    const response = await API.get(
+      DOWNLOAD_DOCUMENT(invoiceId, fileName),
+      {
+        responseType: "blob",
+      }
+    );
 
+    return response; // return full response (important)
+  } catch (error) {
+    throw error;
+  }
+};
 // ── Fetch single invoice ──────────────────────────────────────
 export const fetchInvoiceById = async (id) => {
   try {
@@ -73,22 +95,24 @@ export const fetchInvoiceById = async (id) => {
 };
 
 // ── Submit new invoice ────────────────────────────────────────
-export const createInvoice = async (payload) => {
-  try {
-    const response = await API.post(INVOICES, payload);
-    return response.data;
-  } catch (error) {
-    throw error.response?.data?.error || "Failed to submit invoice";
-  }
+export const createInvoice = async (formData) => {
+  const response = await API.post(INVOICES, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  return response.data;
 };
-export const updateInvoice = async (id, payload) => {
-  try {
-    const response = await API.put(UPDATE_INVOICE(id), payload);
-    return response.data;
-  } catch (error) {
-    throw error.response?.data?.error || "Failed to update invoice";
-  }
-}
+
+export const updateInvoice = async (id, formData) => {
+  const response = await API.put(UPDATE_INVOICE(id), formData
+    , {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  return response.data;
+};
 export const deleteInvoice = async (id) => {
   try {
     const res = await API.delete(DELETE_INVOICE(id));
@@ -309,4 +333,60 @@ export const deleteUser = async (id) => {
 export const changePassword = async (payload) => {
   const res = await API.put(CHANGE_PASSWORD, payload);
   return res.data;
+};
+// ── Auth ──────────────────────────────────────────────────────────
+export const loginUser = async (credentials) => {
+  try {
+    const res = await API.post(AUTH_LOGIN, credentials);
+    return res.data;
+  } catch (error) {
+    throw error.response?.data?.message || "Login failed";
+  }
+};
+
+export const registerUser = async (payload) => {
+  try {
+    const res = await API.post(AUTH_REGISTER, payload);
+    return res.data;
+  } catch (error) {
+    throw error.response?.data?.message || "Registration failed";
+  }
+};
+
+// ─── User Access ───────────────────────────────────────────────
+export const getAllUserAccess = async () => {
+  const res = await API.get(USER_ACCESS);
+  return res.data;
+};
+
+export const getUserAccessById = async (id) => {
+  const res = await API.get(USER_ACCESS_BY_ID(id));
+  return res.data;
+};
+
+export const createUserAccess = async (payload) => {
+  try {
+    const res = await API.post(CREATE_USER_ACCESS, payload);
+    return res.data;
+  } catch (error) {
+    throw error.response?.data?.error || "Creating user access failed";
+  }
+};
+
+export const updateUserAccess = async (id, payload) => {
+  try {
+    const res = await API.put(UPDATE_USER_ACCESS(id), payload);
+    return res.data;
+  } catch (error) {
+    throw error.response?.data?.error || "Updating user access failed";
+  }
+};
+
+export const deleteUserAccess = async (id) => {
+  try {
+    const res = await API.delete(DELETE_USER_ACCESS(id));
+    return res.data;
+  } catch (error) {
+    throw error.response?.data?.error || "Deleting user access failed";
+  }
 };
