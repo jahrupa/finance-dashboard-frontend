@@ -19,13 +19,17 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           {/* Protected routes — wrapped by ProtectedRoute */}
           <Route element={<ProtectedRoute />}>
             <Route path="/kpi-dashboard" element={<App />} />
-            <Route path="/submit" element={<App />} />
+            <Route path="/invoice" element={<App />} />
             <Route path="/finance" element={<App />} />
             <Route path="/hod" element={<App />} />
             <Route path="/payment-approval" element={<App />} />
             <Route path="/payment-processing" element={<App />} />
             <Route path="/user-access" element={<App />} />
+            {/* <Route path="/user-access/:id" element={<App />} /> */}
             <Route path="/user-list" element={<App />} />
+            <Route path="/user-management" element={<App />} />
+            <Route path="/activity-logs" element={<App />} />
+            <Route path="/user-wise-data" element={<App />} />
           </Route>
 
           {/* Fallback */}

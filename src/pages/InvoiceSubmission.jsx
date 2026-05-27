@@ -1,19 +1,22 @@
 import { useState, useEffect } from "react";
 import { useInvoices } from "../context/InvoiceContext";
+import { useAuth } from "../context/AuthContext";
 import {
   createInvoice,
   deleteInvoice,
   downloadFile,
+  downloadZipFile,
   fetchInvoiceById,
   fetchInvoices,
   updateInvoice,
 } from "../api/Service";
+import SearchBar from "../components/ui/SearchBar";
+import FilterSelect from "../components/ui/FilterSelect";
+import Pagination from "../components/ui/Pagination";
+import usePagination from "../components/ui/usePagination";
 
 // Base URL for document downloads — strip trailing slash
-const DOC_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(
-  /\/$/,
-  "",
-);
+
 
 const STATUS_COLORS = {
   "Pending Review": "badge-blue",
@@ -37,52 +40,105 @@ const EMPTY_FORM = {
   taxDetails: "",
   remarks: "",
 };
-
-// Extract a display-friendly filename from a document path
-// e.g. "6a04..._my-invoice.pdf"  →  "my-invoice.pdf"
-const friendlyName = (docPath) => {
+const TAX_TYPE_OPTIONS = [
+  { value: "GST Invoice",      label: "GST Invoice"      },
+  { value: "Non GST Invoice",  label: "Non GST Invoice"  },
+  { value: "Proforma Invoice", label: "Proforma Invoice" },
+  { value: "Advance Voucher",  label: "Advance Voucher"  },
+];
+// ── Filename helpers (module-level) ──────────────────────────
+// Extract just the filename from a stored path (no subdirs expected, but safe)
+const getFileName = (docPath) => {
   if (!docPath) return "";
-  const parts = docPath.split("_");
-  return parts.length > 1 ? parts.slice(1).join("_") : docPath;
+  return docPath.split("/").pop();            // handles "folder/file.pdf" or "file.pdf"
 };
 
-// Build a download URL for a stored document
-const docDownloadUrl = (docPath) =>
-  `${DOC_BASE_URL}/api/v1/invoices/document/${encodeURIComponent(docPath)}`;
+// "1779183565_file-sample_150kB.pdf"  →  "file-sample_150kB.pdf"
+const friendlyName = (docPath) => {
+  const fileName = getFileName(docPath);
+  if (!fileName) return "";
+  // filename format: <timestamp/id>_<original_name>
+  const underscore = fileName.indexOf("_");
+  return underscore !== -1 ? fileName.slice(underscore + 1) : fileName;
+};
 
-export default function InvoiceSubmission() {
+
+export default function InvoiceSubmission({ userDepartment = null, isAdmin = true }) {
   const { getDaysPending, DEPARTMENTS, VENDORS } = useInvoices();
+  // Issue 3 fix: get logged-in user to auto-fill uploadedBy and department
+  const { user } = useAuth();
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [showForm, setShowForm] = useState(false);
-  const [filter, setFilter] = useState({ dept: "", status: "", search: "" });
+
+  // Issue 3 fix: auto-populate uploadedBy and department whenever user changes or form opens
+  useEffect(() => {
+    if (user) {
+      setForm(prev => ({
+        ...prev,
+        uploadedBy: user.name || prev.uploadedBy,
+        // Non-admins are locked to their own department
+        department: (!isAdmin && user.department) ? user.department : prev.department,
+      }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, showForm]);
+
+  // If a non-admin user has a department, lock the dept filter to their department
+  const [filter, setFilter] = useState({ dept: userDepartment || "", status: "", search: "", fromDate: "", toDate: "" });
+  const { page, pageSize, setPage, setPageSize, resetPage, paginate } = usePagination(10);
   const [submitted, setSubmitted] = useState(false);
   const [invoices, setInvoices] = useState([]);
   const [action, setAction] = useState({ edit: false, id: null });
 
   // Files the user picks to upload (NEW files)
   const [newFiles, setNewFiles] = useState([]);
-
   // Existing docs already saved on the server (for edit mode)
   // Array of doc path strings
   const [existingDocs, setExistingDocs] = useState([]);
   // Docs the user wants to remove (subset of existingDocs)
   const [docsToRemove, setDocsToRemove] = useState([]);
-
   // ─── Load invoices ───────────────────────────────────────────
-  const loadInvoices = async () => {
+  const loadInvoices = async (f = filter) => {
     try {
-      const res = await fetchInvoices();
+      const params = {};
+      // Non-admin users are always scoped to their department
+      const dept = (!isAdmin && userDepartment) ? userDepartment : f.dept;
+      if (dept)       params.department = dept;
+      if (f.status)   params.status     = f.status;
+      if (f.search)   params.search     = f.search;
+      if (f.fromDate) params.fromDate   = f.fromDate;
+      if (f.toDate)   params.toDate     = f.toDate;
+      const res = await fetchInvoices(params);
       setInvoices(res?.data || []);
     } catch (err) {
       console.error("Error fetching invoices:", err);
       setInvoices([]);
     }
   };
+useEffect(() => {
+  let isMounted = true;
 
-  useEffect(() => {
-    loadInvoices();
-  }, []);
+  const fetchData = async () => {
+    try {
+      const res = await fetchInvoices();
+      if (isMounted) {
+        setInvoices(res?.data || []);
+      }
+    } catch (err) {
+      console.error("Fetch error:", err);
+      if (isMounted) {
+        setInvoices([]);
+      }
+    }
+  };
+
+  fetchData();
+
+  return () => {
+    isMounted = false;
+  };
+}, []);
 
   // ─── Form input change ───────────────────────────────────────
   const handleChange = (e) =>
@@ -185,46 +241,60 @@ export default function InvoiceSubmission() {
     }
   };
 
-  // ─── Download a stored document ──────────────────────────────
-  // Extract filename from stored path
-const getFileName = (docPath) => {
-  if (!docPath) return "";
-  return docPath.split("/").pop();
-};
-
-const friendlyName = (docPath) => {
-  if (!docPath) return "";
-  const fileName = getFileName(docPath);
-  const parts = fileName.split("_");
-  return parts.length > 1 ? parts.slice(1).join("_") : fileName;
-};
-
-  // Build correct backend URL (IMPORTANT FIX)
-
-const handleDownloadDoc = async (invoiceId, docPath) => {
-  try {
+  // ─── Download documents — single file or zip (multiple) ─────
+  const handleDownloadDoc = async (invoiceId, docPath) => {
     const fileName = getFileName(docPath);
+    if (!fileName) return;
+    try {
+      const response = await downloadFile(invoiceId, fileName);
+      const blob = new Blob([response.data], {
+        type: response.headers["content-type"] || "application/octet-stream",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = friendlyName(docPath) || fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Download error:", err);
+      alert("Unable to download document. Please try again.");
+    }
+  };
 
-    const response = await downloadFile(invoiceId, fileName);
+  // Download all docs for an invoice as a ZIP
+const handleDownloadZip = async (invoiceId) => {
+  if (!invoiceId || typeof invoiceId !== "string") {
+    console.error("Invalid invoiceId:", invoiceId);
+    return;
+  }
 
-    const blob = response.data; // Axios blob fix
+  try {
+    const response = await downloadZipFile(invoiceId);
+
+    const blob = new Blob([response.data], {
+      type: "application/zip",
+    });
 
     const url = window.URL.createObjectURL(blob);
 
     const a = document.createElement("a");
     a.href = url;
-    a.download = friendlyName(docPath) || fileName || "document.pdf";
+    a.download = `invoice-documents.zip`;
 
     document.body.appendChild(a);
     a.click();
-
     a.remove();
+
     window.URL.revokeObjectURL(url);
   } catch (err) {
-    console.error("Download error:", err);
-    alert("Unable to download PDF");
+    console.error("ZIP download error:", err);
+    alert("Unable to download ZIP file.");
   }
 };
+
   // ─── Close modal ─────────────────────────────────────────────
   const closeModal = () => {
     setShowForm(false);
@@ -237,14 +307,18 @@ const handleDownloadDoc = async (invoiceId, docPath) => {
 
   // ─── Filters ─────────────────────────────────────────────────
   const filtered = invoices.filter((inv) => {
-    const matchDept = !filter.dept || inv.department === filter.dept;
-    const matchStatus = !filter.status || inv.status === filter.status;
+    const matchDept   = !filter.dept   || inv.department === filter.dept;
+    const matchStatus = !filter.status || inv.status     === filter.status;
     const matchSearch =
       !filter.search ||
       inv.vendor?.toLowerCase().includes(filter.search.toLowerCase()) ||
       inv.invoiceNo?.toLowerCase().includes(filter.search.toLowerCase()) ||
       inv.id?.toLowerCase().includes(filter.search.toLowerCase());
-    return matchDept && matchStatus && matchSearch;
+    // Date range: compare invoice_date string lexicographically (ISO format)
+    const invDate     = inv.invoiceDate ? inv.invoiceDate.split("T")[0] : "";
+    const matchFrom   = !filter.fromDate || (invDate && invDate >= filter.fromDate);
+    const matchTo     = !filter.toDate   || (invDate && invDate <= filter.toDate);
+    return matchDept && matchStatus && matchSearch && matchFrom && matchTo;
   });
 
   const getAgeClass = (days) => {
@@ -280,7 +354,9 @@ const handleDownloadDoc = async (invoiceId, docPath) => {
         <div>
           <h1 className="page-title">Invoice Submission Tracker</h1>
           <p className="page-subtitle">
-            Upload and track all invoices across departments
+            {userDepartment && !isAdmin
+              ? `Showing invoices for your department: ${userDepartment}`
+              : "Upload and track all invoices across departments"}
           </p>
         </div>
         <button
@@ -307,35 +383,72 @@ const handleDownloadDoc = async (invoiceId, docPath) => {
 
       {/* FILTERS */}
       <div className="filter-bar">
-        <input
-          className="form-control search-input"
+        <SearchBar
+          // className="form-control search-input"
           placeholder="🔍 Search vendor, invoice no, ID..."
           value={filter.search}
-          onChange={(e) => setFilter((p) => ({ ...p, search: e.target.value }))}
+          onChange={(v) => { setFilter((p) => ({ ...p, search: v })); resetPage(); }}
+
+        // value={filter.search}
+        // onChange={(v) => { setFilter((p) => ({ ...p, search: v })); resetPage(); }}
+        // placeholder="Search vendor, invoice no, ID..."
+        // className="form-control search-input"
         />
-        <select
-          className="form-control"
+        <FilterSelect
           value={filter.dept}
-          onChange={(e) => setFilter((p) => ({ ...p, dept: e.target.value }))}
-        >
-          <option value="">All Departments</option>
-          {DEPARTMENTS.map((d) => (
-            <option key={d}>{d}</option>
-          ))}
-        </select>
-        <select
+          onChange={(v) => { if (!userDepartment || isAdmin) { setFilter((p) => ({ ...p, dept: v })); resetPage(); } }}
+          options={DEPARTMENTS}
+          placeholder={userDepartment && !isAdmin ? `Dept: ${userDepartment}` : "All Departments"}
           className="form-control"
+          disabled={!isAdmin && Boolean(userDepartment)}
+        />
+        <FilterSelect
           value={filter.status}
-          onChange={(e) => setFilter((p) => ({ ...p, status: e.target.value }))}
-        >
-          <option value="">All Statuses</option>
-          {allStatuses.map((s) => (
-            <option key={s}>{s}</option>
-          ))}
-        </select>
-        <span
-          style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: 4 }}
-        >
+          onChange={(v) => { setFilter((p) => ({ ...p, status: v })); resetPage(); }}
+          options={allStatuses}
+          placeholder="All Statuses"
+        />
+        {/* ── Date range pickers ─────────────────────────────── */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" }}>From</span>
+          <input
+            type="date"
+            className="form-control"
+            style={{ width: 145, fontSize: 13 }}
+            value={filter.fromDate}
+            max={filter.toDate || new Date().toISOString().split("T")[0]}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFilter((p) => ({ ...p, fromDate: v }));
+              resetPage();
+            }}
+          />
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>To</span>
+          <input
+            type="date"
+            className="form-control"
+            style={{ width: 145, fontSize: 13 }}
+            value={filter.toDate}
+            min={filter.fromDate || undefined}
+            max={new Date().toISOString().split("T")[0]}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFilter((p) => ({ ...p, toDate: v }));
+              resetPage();
+            }}
+          />
+          {(filter.fromDate || filter.toDate) && (
+            <button
+              className="btn btn-outline"
+              style={{ fontSize: 11, padding: "3px 8px", whiteSpace: "nowrap" }}
+              onClick={() => { setFilter((p) => ({ ...p, fromDate: "", toDate: "" })); resetPage(); }}
+              title="Clear date range"
+            >
+              ✕ Clear dates
+            </button>
+          )}
+        </div>
+        <span style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
           {filtered.length} records
         </span>
       </div>
@@ -370,7 +483,7 @@ const handleDownloadDoc = async (invoiceId, docPath) => {
                   </td>
                 </tr>
               ) : (
-                filtered.map((inv) => {
+                paginate(filtered).map((inv) => {
                   const days = getDaysPending(inv.dateOfReceipt);
                   const ageClass = getAgeClass(days);
                   const rowDocs = getRowDocs(inv);
@@ -388,23 +501,18 @@ const handleDownloadDoc = async (invoiceId, docPath) => {
                             ✏️
                           </button>
 
-                          {/* Download — only shown when at least one doc exists */}
-                          {/* {rowDocs.length > 0 && (
                             <button
                               className="download-doc-btn"
-                              title={`Download ${rowDocs.length > 1 ? rowDocs.length + " documents" : friendlyName(rowDocs[0])}`}
-                              onClick={() => {
-                                // Download all docs for this row
-                                rowDocs.forEach((doc, i) => {
-                                  setTimeout(() => {
-                                    handleDownloadDoc(inv.id, doc);
-                                  }, i * 300);
-                                });
-                              }}
+                              title={
+                                rowDocs.length > 1
+                                  ? `Download ${rowDocs.length} documents as ZIP`
+                                  : `Download ${friendlyName(rowDocs[0])}`
+                              }
+                              onClick={() => handleDownloadZip(inv.id)}
                             >
                               <svg
-                                width="14"
-                                height="14"
+                                width="11"
+                                height="11"
                                 viewBox="0 0 24 24"
                                 fill="none"
                                 stroke="currentColor"
@@ -416,13 +524,13 @@ const handleDownloadDoc = async (invoiceId, docPath) => {
                                 <polyline points="7 10 12 15 17 10" />
                                 <line x1="12" y1="15" x2="12" y2="3" />
                               </svg>
-                              {rowDocs.length > 1 && (
+                              {rowDocs.length > 0 && (
                                 <span className="doc-count-badge">
                                   {rowDocs.length}
                                 </span>
                               )}
                             </button>
-                          )} */}
+                         
 
                           {/* Delete */}
                           <button
@@ -430,7 +538,7 @@ const handleDownloadDoc = async (invoiceId, docPath) => {
                             onClick={() => handleDelete(inv.id)}
                             title="Delete invoice"
                           >
-                            🗑
+                            🗑️
                           </button>
                         </div>
                       </td>
@@ -461,6 +569,14 @@ const handleDownloadDoc = async (invoiceId, docPath) => {
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={page}
+          totalItems={filtered.length}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          pageSizeOptions={[10, 20, 50]}
+          onPageSizeChange={setPageSize}
+        />
       </div>
 
       {/* ── MODAL ───────────────────────────────────────────────── */}
@@ -514,8 +630,34 @@ const handleDownloadDoc = async (invoiceId, docPath) => {
                     name="invoiceDate"
                     className="form-control"
                     value={form.invoiceDate}
-                    onChange={handleChange}
+                    // max = today, min = 365 days ago
+                    max={new Date().toISOString().split("T")[0]}
+                    min={(() => {
+                      const d = new Date();
+                      d.setFullYear(d.getFullYear() - 1);
+                      return d.toISOString().split("T")[0];
+                    })()}
+                    onChange={(e) => {
+                      const chosen = e.target.value;
+                      const minDate = (() => {
+                        const d = new Date();
+                        d.setFullYear(d.getFullYear() - 1);
+                        return d.toISOString().split("T")[0];
+                      })();
+                      if (chosen < minDate) {
+                        alert(`Invoice date cannot be older than 365 days. Earliest allowed: ${minDate}`);
+                        return;
+                      }
+                      if (chosen > new Date().toISOString().split("T")[0]) {
+                        alert("Invoice date cannot be a future date.");
+                        return;
+                      }
+                      handleChange(e);
+                    }}
                   />
+                  <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }}>
+                    Invoices older than 365 days cannot be submitted.
+                  </p>
                 </div>
 
                 {/* Amount */}
@@ -534,28 +676,39 @@ const handleDownloadDoc = async (invoiceId, docPath) => {
                 {/* Department */}
                 <div className="form-group">
                   <label className="form-label">Department *</label>
-                  <select
-                    name="department"
-                    className="form-control"
-                    value={form.department}
-                    onChange={handleChange}
-                  >
-                    <option value="">-- Select Department --</option>
-                    {DEPARTMENTS.map((d) => (
-                      <option key={d}>{d}</option>
-                    ))}
-                  </select>
+                  {/* Issue 3: non-admins see their dept as read-only */}
+                  {!isAdmin && user?.department ? (
+                    <input
+                      className="form-control"
+                      value={user.department}
+                      readOnly
+                      style={{ background: "#f8fafc", color: "#475569", cursor: "not-allowed" }}
+                    />
+                  ) : (
+                    <select
+                      name="department"
+                      className="form-control"
+                      value={form.department}
+                      onChange={handleChange}
+                    >
+                      <option value="">-- Select Department --</option>
+                      {DEPARTMENTS.map((d) => (
+                        <option key={d}>{d}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 {/* Uploaded By */}
                 <div className="form-group">
-                  <label className="form-label">Uploaded By *</label>
+                  <label className="form-label">Uploaded By</label>
+                  {/* Issue 3: always shows logged-in user name, read-only */}
                   <input
                     name="uploadedBy"
                     className="form-control"
-                    placeholder="Your name"
-                    value={form.uploadedBy}
-                    onChange={handleChange}
+                    value={user?.name || form.uploadedBy || ""}
+                    readOnly
+                    style={{ background: "#f8fafc", color: "#475569", cursor: "not-allowed" }}
                   />
                 </div>
 
@@ -572,7 +725,27 @@ const handleDownloadDoc = async (invoiceId, docPath) => {
                 </div>
 
                 {/* Tax */}
+                  {/* Tax Type — dropdown, not free text */}
                 <div className="form-group">
+                  <label className="form-label">Tax Type</label>
+                  <select
+                    name="taxDetails"
+                    className="form-control"
+                    value={form.taxDetails}
+                    onChange={handleChange}
+                  >
+                    <option value="">— Select Tax Type —</option>
+                    {TAX_TYPE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                  {/* {editTarget.taxDetails && editForm.taxDetails !== editTarget.taxDetails && (
+                    <span style={{ fontSize: 11, color: "var(--warning)" }}>
+                      Was: {editTarget.taxDetails}
+                    </span>
+                  )} */}
+                </div>
+                {/* <div className="form-group">
                   <label className="form-label">Tax Details</label>
                   <input
                     name="taxDetails"
@@ -581,7 +754,7 @@ const handleDownloadDoc = async (invoiceId, docPath) => {
                     value={form.taxDetails}
                     onChange={handleChange}
                   />
-                </div>
+                </div> */}
               </div>
 
               {/* ── EXISTING DOCUMENTS (edit mode only) ──────────── */}
@@ -610,7 +783,7 @@ const handleDownloadDoc = async (invoiceId, docPath) => {
                           {/* Download existing doc */}
                           <button
                             className="doc-chip-download"
-                            onClick={() => handleDownloadDoc(doc.id, doc)}
+                            onClick={() => handleDownloadDoc(action.id, doc)}
                             title={`Download ${friendlyName(doc)}`}
                             type="button"
                           >

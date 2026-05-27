@@ -198,14 +198,16 @@ const INITIAL_INVOICES = [
 ];
 
 const DEPARTMENTS = [
-  "IT",
-  "Operations",
-  "Logistics",
-  "Admin",
-  "Facilities",
+  "Engineering",
+  "Design",
+  "Product",
   "Marketing",
+  "Sales",
   "HR",
   "Finance",
+  "Operations",
+  "Support",
+  "Legal",
 ];
 const VENDORS = [
   "TechCorp Solutions",

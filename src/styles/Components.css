@@ -1,0 +1,188 @@
+/* ═══════════════════════════════════════════════════════════
+   Shared UI Component Styles
+   SearchBar · FilterSelect · Pagination · DataTable
+═══════════════════════════════════════════════════════════ */
+
+/* ── Filter Bar (shared layout for search + filters) ───── */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+/* ── SearchBar ──────────────────────────────────────────── */
+.sb-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 200px;
+  max-width: 340px;
+}
+
+.sb-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--text-muted, #94a3b8);
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+.sb-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 32px 0 34px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  font-size: 13px;
+  background: var(--surface, #fff);
+  color: var(--text-primary, #1e293b);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+}
+
+.sb-input::placeholder {
+  color: var(--text-muted, #94a3b8);
+}
+
+.sb-input:focus {
+  border-color: var(--accent, #6366f1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #6366f1) 12%, transparent);
+}
+
+.sb-clear {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted, #94a3b8);
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+}
+
+.sb-clear:hover {
+  color: var(--danger, #ef4444);
+  background: #fee2e2;
+}
+
+/* ── FilterSelect ───────────────────────────────────────── */
+/* .filter-select {
+  height: 36px;
+  padding: 0 32px 0 10px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  font-size: 13px;
+  background: var(--surface, #fff);
+  color: var(--text-primary, #1e293b);
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.filter-select:focus {
+  border-color: var(--accent, #6366f1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #6366f1) 12%, transparent);
+} */
+
+/* ── Pagination ─────────────────────────────────────────── */
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border, #e2e8f0);
+  background: var(--surface, #fff);
+  border-radius: 0 0 12px 12px;
+}
+
+.pagination-info {
+  font-size: 12.5px;
+  color: var(--text-muted, #94a3b8);
+}
+
+.pagination-info strong {
+  color: var(--text-primary, #1e293b);
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pg-btn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  color: var(--text-primary, #1e293b);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pg-btn:hover:not(:disabled) {
+  background: var(--bg, #f8fafc);
+  border-color: var(--accent, #6366f1);
+  color: var(--accent, #6366f1);
+}
+
+.pg-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.pg-btn-active {
+  background: var(--accent, #6366f1) !important;
+  border-color: var(--accent, #6366f1) !important;
+  color: #fff !important;
+  font-weight: 700;
+}
+
+.pg-ellipsis {
+  padding: 0 4px;
+  color: var(--text-muted, #94a3b8);
+  font-size: 13px;
+}
+
+.pagination-size {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-muted, #94a3b8);
+}
+
+.pg-size-select {
+  height: 30px;
+  padding: 0 24px 0 8px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 6px;
+  font-size: 12.5px;
+  background: var(--surface, #fff);
+  color: var(--text-primary, #1e293b);
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+  outline: none;
+}

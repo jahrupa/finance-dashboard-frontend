@@ -17,12 +17,14 @@ export const UPDATE_INVOICE = (id) => `${V1}/invoices/${id}`;
 export const DELETE_INVOICE = (id) => `${V1}/invoices/${id}`;
 export const DOWNLOAD_DOCUMENT = (id, filename) =>
   `${V1}/invoices/${id}/documents/${encodeURIComponent(filename)}`;
+export const DOWNLOAD_ZIP_DOCUMENT = (id) => `${V1}/invoices/${id}/documents/download-zip`;
+
 
 export const FINANCE_ACCEPT = (id) => `${V1}/invoices/${id}/finance/accept`;
 export const FINANCE_REJECT = (id) => `${V1}/invoices/${id}/finance/reject`;
 export const FINANCE_HOLD = (id) => `${V1}/invoices/${id}/finance/hold`;
 export const FINANCE_PENDING = (id) => `${V1}/invoices/${id}/finance/pending`;
-
+export const UPDATE_FINANCE = (id) => `${V1}/invoices/${id}/finance/edit`;
 export const HOD_APPROVE = (id) => `${V1}/invoices/${id}/hod/approve`;
 export const HOD_REJECT = (id) => `${V1}/invoices/${id}/hod/reject`;
 export const HOD_SEND_BACK = (id) => `${V1}/invoices/${id}/hod/send-back`;
@@ -56,9 +58,16 @@ export const VENDOR_BY_ID = (id) => `${V1}/vendors/${id}`;
 
 // ── Users ──────────────────────────────────────────────────
 export const USERS = `${V1}/users`;
+export const CREATE_USER = `${V1}/users`;
 export const USER_BY_ID = (id) => `${V1}/users/${id}`;
+export const UPDATE_USER = (id) => `${V1}/users/${id}`;
+export const DELETE_USER = (id) => `${V1}/users/${id}`;
 export const USER_ME = `${V1}/users/me`;
 export const CHANGE_PASSWORD = `${V1}/users/me/password`;
+// export const USERS = `${V1}/users`;
+// export const USER_BY_ID = (id) => `${V1}/users/${id}`;
+// export const USER_ME = `${V1}/users/me`;
+// export const CHANGE_PASSWORD = `${V1}/users/me/password`;
 
 // ── User Access Control ──────────────────────────────────────────────────
 // ── User Access Control ───────────────────────────────────────────────

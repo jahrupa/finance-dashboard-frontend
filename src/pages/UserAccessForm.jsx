@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 // import { ALL_PAGES, USER_ROLES, DEPARTMENTS, CRUD_OPERATIONS } from '../constants/pages'
 import "../styles/UserAccessForm.css";
-import { createUserAccess, updateUserAccess } from "../api/Service";
+import { createUser, createUserAccess, fetchUserById, updateUser, updateUserAccess } from "../api/Service";
+import { useInvoices } from "../context/InvoiceContext";
 
 const defaultCrud = {
   create: false,
@@ -31,23 +32,11 @@ const USER_ROLES = [
   { value: "employee", label: "Employee" },
 ];
 
-const DEPARTMENTS = [
-  "Engineering",
-  "Design",
-  "Product",
-  "Marketing",
-  "Sales",
-  "HR",
-  "Finance",
-  "Operations",
-  "Support",
-  "Legal",
-];
-
 const CRUD_OPERATIONS = ["create", "read", "update", "delete"];
 
 function UserAccessForm() {
   const navigate = useNavigate();
+  const { DEPARTMENTS } = useInvoices();
   const { id } = useParams();
   const isEdit = Boolean(id);
 
@@ -57,6 +46,7 @@ function UserAccessForm() {
       return {
         user_name: "",
         user_email: "",
+        password: "",
         user_dept: "",
         user_role: "",
         page_access: [],
@@ -87,7 +77,36 @@ function UserAccessForm() {
       crud_access: existing.crud_access || {},
     };
   };
+  useEffect(() => {
+    if (!isEdit) return;
 
+    const loadUser = async () => {
+      try {
+        setLoading(true);
+
+        const res = await fetchUserById(id);
+        const user = res?.user;
+
+        if (!user) return;
+
+        setForm({
+          user_name: user.name || "",
+          user_email: user.email || "",
+          password: "",
+          user_dept: user.department || "",
+          user_role: user.role || "",
+          page_access: user.pageAccess || [],
+          crud_access: user.crudAccess || {},
+        });
+      } catch (err) {
+        console.error("Failed to load user", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadUser();
+  }, [id, isEdit]);
   const [form, setForm] = useState(getInitialForm);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -95,12 +114,25 @@ function UserAccessForm() {
   // ================= VALIDATION =================
   function validate() {
     const e = {};
-    if (!form.user_name.trim()) e.user_name = "User name is required";
-    if (!form.user_email.trim()) e.user_email = "Email is required";
-    if (!form.user_dept) e.user_dept = "Department is required";
-    if (!form.user_role) e.user_role = "Role is required";
+
+    if (!form.user_name.trim())
+      e.user_name = "User name is required";
+
+    if (!form.user_email.trim())
+      e.user_email = "Email is required";
+
+    if (!isEdit && !form.password.trim())
+      e.password = "Password is required";
+
+    if (!form.user_dept)
+      e.user_dept = "Department is required";
+
+    if (!form.user_role)
+      e.user_role = "Role is required";
+
     if (form.page_access.length === 0)
       e.page_access = "Select at least one page";
+
     return e;
   }
 
@@ -185,19 +217,21 @@ function UserAccessForm() {
     const payload = {
       name: form.user_name.trim(),
       email: form.user_email.trim(),
-      user_dept: form.user_dept,
+      password: form.password,
+      department: form.user_dept,
       role: form.user_role,
-      page_access: isAllCrudFalse ? [] : form.page_access,
-      crud_access: form.crud_access,
+      pageAccess: isAllCrudFalse ? [] : form.page_access,
+      crudAccess: form.crud_access,
     };
 
     try {
       setLoading(true);
 
       if (isEdit) {
-        await updateUserAccess(id, payload);
+        delete payload.password;
+        await updateUser(id, payload);
       } else {
-        await createUserAccess(payload);
+        await createUser(payload);
       }
 
       navigate("/user-list");
@@ -262,7 +296,27 @@ function UserAccessForm() {
                 <span className="ua-field-error">{errors.user_email}</span>
               )}
             </div>
+            {/* {!isEdit && ( */}
+              <div className="ua-field">
+                <label className="ua-label">
+                  Password <span className="ua-req">*</span>
+                </label>
 
+                <input
+                  className={`ua-input ${errors.password ? "ua-input-error" : ""}`}
+                  type="password"
+                  placeholder="Enter password"
+                  value={form.password}
+                  onChange={(e) => handleField("password", e.target.value)}
+                />
+
+                {errors.password && (
+                  <span className="ua-field-error">
+                    {errors.password}
+                  </span>
+                )}
+              </div>
+            {/* )} */}
             <div className="ua-field">
               <label className="ua-label">
                 Department <span className="ua-req">*</span>
@@ -383,7 +437,7 @@ function UserAccessForm() {
           <button
             type="button"
             className="ua-btn ua-btn-secondary"
-            onClick={()=> setForm(getInitialForm())}
+            onClick={() => setForm(getInitialForm())}
           >
             Cancel
           </button>

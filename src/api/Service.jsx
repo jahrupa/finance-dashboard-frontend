@@ -38,7 +38,10 @@ import {
   USER_ACCESS_BY_ID,
   UPDATE_USER_ACCESS,
   DELETE_USER_ACCESS,
-  CREATE_USER_ACCESS
+  CREATE_USER_ACCESS,
+  DOWNLOAD_ZIP_DOCUMENT,
+  UPDATE_FINANCE,
+  CREATE_USER
 } from "./endpoints";
 
 export const fetchDashboardKpis = async () => {
@@ -69,7 +72,7 @@ export const fetchInvoices = async ({
     throw error.response?.data?.error || "Failed to fetch invoices";
   }
 };
-// FIXED DOWNLOAD SERVICE
+// DOWNLOAD SERVICE
 export const downloadFile = async (invoiceId, fileName) => {
   try {
     const response = await API.get(
@@ -79,11 +82,16 @@ export const downloadFile = async (invoiceId, fileName) => {
       }
     );
 
-    return response; // return full response (important)
+    return response; 
   } catch (error) {
     throw error;
   }
 };
+
+export const downloadZipFile = (invoiceId) =>
+  API.get(DOWNLOAD_ZIP_DOCUMENT(invoiceId), {
+    responseType: "blob",
+  });
 // ── Fetch single invoice ──────────────────────────────────────
 export const fetchInvoiceById = async (id) => {
   try {
@@ -155,6 +163,15 @@ export const financePending = async (id, payload) => {
     return response.data;
   } catch (error) {
     throw error.response?.data?.error || "Finance pending failed";
+  }
+}
+
+export const updateFinance = async (id, payload) => {
+  try {
+    const response = await API.patch(UPDATE_FINANCE(id), payload);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data?.error || "Finance update failed";
   }
 }
 // ── HOD actions ───────────────────────────────────────────────
@@ -309,7 +326,10 @@ export const fetchUsers = async () => {
   const res = await API.get(USERS);
   return res.data;
 };
-
+export const createUser = async (payload) => {
+  const res = await API.post(CREATE_USER, payload);
+  return res.data;
+};
 export const fetchUserById = async (id) => {
   const res = await API.get(USER_BY_ID(id));
   return res.data;

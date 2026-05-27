@@ -7,25 +7,32 @@ import HODApproval from "./pages/HODApproval";
 import PaymentApproval from "./pages/PaymentApproval";
 import PaymentProcessing from "./pages/PaymentProcessing";
 import KPIDashboard from "./pages/KPIDashboard";
-import { InvoiceProvider } from "./context/InvoiceContext";
-import "./App.css";
 import UserAccessForm from "./pages/UserAccessForm";
 import UserList from "./pages/UserList";
+import UserManagement from "./pages/UserManagement";
+import ActivityLogs from "./pages/ActivityLogs";
+import UserWiseData from "./pages/UserWiseData";
+import { InvoiceProvider } from "./context/InvoiceContext";
+import { useAuth } from "./context/AuthContext";
+import "./App.css";
+import "../src/styles/Components.css";
 
-const PAGES = [
+const ALL_PAGES = [
   {
     id: "dashboard",
     label: "KPI Dashboard",
     icon: "📊",
     short: "Dashboard",
     path: "/kpi-dashboard",
+    roles: ["all"],
   },
   {
-    id: "submission",
+    id: "invoice",
     label: "Invoice Submission",
     icon: "📤",
-    short: "Submit",
-    path: "/submit",
+    short: "Invoice",
+    path: "/invoice",
+    roles: ["all"],
   },
   {
     id: "finance",
@@ -33,14 +40,23 @@ const PAGES = [
     icon: "🔍",
     short: "Finance",
     path: "/finance",
+    roles: ["admin", "super_admin", "finance"],
   },
-  { id: "hod", label: "HOD Approval", icon: "👨‍💼", short: "HOD", path: "/hod" },
+  {
+    id: "hod",
+    label: "HOD Approval",
+    icon: "👨‍💼",
+    short: "HOD",
+    path: "/hod",
+    roles: ["admin", "super_admin", "hod"],
+  },
   {
     id: "payment-approval",
     label: "Payment Approval",
     icon: "✅",
     short: "Approve",
     path: "/payment-approval",
+    roles: ["admin", "super_admin", "payment"],
   },
   {
     id: "payment-processing",
@@ -48,31 +64,65 @@ const PAGES = [
     icon: "💳",
     short: "Process",
     path: "/payment-processing",
+    roles: ["admin", "super_admin", "payment"],
   },
   {
     id: "user-access",
     label: "User Access",
-    icon: "👤",
-    short: "User Access",
+    icon: "🔐",
+    short: "Access",
     path: "/user-access",
+    roles: ["admin", "super_admin"],
   },
-   {
+  // {
+  //   id: "user-access",
+  //   label: "User Access",
+  //   icon: "🔐",
+  //   short: "Access",
+  //   path: "/user-access/:id",
+  //   roles: ["admin", "super_admin"],
+  // },
+  {
     id: "user-list",
-    label: "User List",
-    icon: "👤",
+    label: "User Access List",
+    icon: "👥",
     short: "User List",
     path: "/user-list",
+    roles: ["admin", "super_admin"],
+  },
+  {
+    id: "user-management",
+    label: "User Management",
+    icon: "👤",
+    short: "Users",
+    path: "/user-management",
+    roles: ["admin", "super_admin"],
+  },
+  {
+    id: "activity-logs",
+    label: "Activity Logs",
+    icon: "📋",
+    short: "Logs",
+    path: "/activity-logs",
+    roles: ["admin", "super_admin"],
+  },
+  {
+    id: "user-wise-data",
+    label: "User-Wise Data",
+    icon: "📊",
+    short: "By User",
+    path: "/user-wise-data",
+    roles: ["admin", "super_admin"],
   },
 ];
 
-// Map route path → page id
-const PATH_TO_ID = Object.fromEntries(PAGES.map((p) => [p.path, p.id]));
-// Map page id → route path
-const ID_TO_PATH = Object.fromEntries(PAGES.map((p) => [p.id, p.path]));
+const PATH_TO_ID = Object.fromEntries(ALL_PAGES.map((p) => [p.path, p.id]));
+const ID_TO_PATH = Object.fromEntries(ALL_PAGES.map((p) => [p.id, p.path]));
 
 export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [screenSize, setScreenSize] = useState(() => {
@@ -91,9 +141,16 @@ export default function App() {
     return () => window.removeEventListener("resize", handler);
   }, []);
 
-  // Derive the active page from the URL
+  // Filter pages based on user role
+  const userRole = user?.role || "employee";
+  const isAdmin = ["admin", "super_admin"].includes(userRole);
+
+  const PAGES = ALL_PAGES.filter(
+    (p) => p.roles.includes("all") || p.roles.includes(userRole),
+  );
+
   const activePage = PATH_TO_ID[location.pathname] ?? "dashboard";
-  const currentPage = PAGES.find((p) => p.id === activePage);
+  const currentPage = ALL_PAGES.find((p) => p.id === activePage);
 
   const handlePageChange = (id) => {
     navigate(ID_TO_PATH[id] ?? "/");
@@ -103,12 +160,21 @@ export default function App() {
   const isDesktop = screenSize === "desktop";
   const isMobile = screenSize === "mobile";
 
+  // Department-based invoice filter helper — passed down via context or prop drilling
+  // Non-admin users should only see invoices from their own department
+  const userDepartment = !isAdmin && user?.department ? user.department : null;
+
   const renderPage = () => {
     switch (activePage) {
       case "dashboard":
         return <KPIDashboard />;
-      case "submission":
-        return <InvoiceSubmission />;
+      case "invoice":
+        return (
+          <InvoiceSubmission
+            userDepartment={userDepartment}
+            isAdmin={isAdmin}
+          />
+        );
       case "finance":
         return <FinanceReview />;
       case "hod":
@@ -117,10 +183,16 @@ export default function App() {
         return <PaymentApproval />;
       case "payment-processing":
         return <PaymentProcessing />;
-         case "user-access":
+      case "user-access":
         return <UserAccessForm />;
-         case "user-list":
+      case "user-list":
         return <UserList />;
+      case "user-management":
+        return <UserManagement />;
+      case "activity-logs":
+        return <ActivityLogs />;
+      case "user-wise-data":
+        return <UserWiseData />;
       default:
         return <KPIDashboard />;
     }
@@ -129,7 +201,6 @@ export default function App() {
   return (
     <InvoiceProvider>
       <div className="app-shell">
-        {/* Sidebar — desktop only */}
         {isDesktop && (
           <Sidebar
             pages={PAGES}
@@ -138,7 +209,6 @@ export default function App() {
           />
         )}
 
-        {/* Drawer — mobile/tablet */}
         {!isDesktop && (
           <>
             <div
@@ -168,7 +238,6 @@ export default function App() {
         <main
           className={`main-content ${isDesktop ? "with-sidebar" : "no-sidebar"}`}
         >
-          {/* Top bar — mobile/tablet */}
           {!isDesktop && (
             <div className="topbar">
               <button
@@ -193,10 +262,9 @@ export default function App() {
             {renderPage()}
           </div>
 
-          {/* Bottom nav — mobile only */}
           {isMobile && (
             <nav className="bottom-nav">
-              {PAGES.map((page) => (
+              {PAGES.slice(0, 6).map((page) => (
                 <button
                   key={page.id}
                   className={`bottom-nav-item ${activePage === page.id ? "active" : ""}`}
