@@ -1,9 +1,11 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import "./Sidebar.css";
+import { useCRUD } from "../hook/useCRUD";
 
 export default function Sidebar({ pages, activePage, setActivePage }) {
   const { user, logout } = useAuth();
+  console.log(user,'user')
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -19,7 +21,11 @@ export default function Sidebar({ pages, activePage, setActivePage }) {
   const displayRole = user?.role
     ? user.role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
     : "Finance Manager";
+ const { canPage } = useCRUD();
 
+  const visiblePages = pages.filter((page) =>
+    canPage(page.label)
+  );
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -32,7 +38,7 @@ export default function Sidebar({ pages, activePage, setActivePage }) {
 
       <nav className="sidebar-nav">
         <span className="nav-section-label">Navigation</span>
-        {pages.map((page) => (
+        {visiblePages.map((page) => (
           <button
             key={page.id}
             className={`nav-item ${activePage === page.id ? "active" : ""}`}

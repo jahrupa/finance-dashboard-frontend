@@ -8,7 +8,7 @@ const V1 = "/api/v1";
 // export const INVOICE_ACTION = "api/v1/invoice";
 
 export const AUTH_LOGIN = `${V1}/auth/login`;
-export const AUTH_REGISTER = `${V1}/auth/register`;
+// export const AUTH_REGISTER = `${V1}/auth/register`;
 // ── Invoice APIs ───────────────────────────────────────
 export const INVOICES = `${V1}/invoices`;
 export const INVOICE_BY_ID = (id) => `${V1}/invoices/${id}`;

@@ -31,12 +31,13 @@ API.interceptors.response.use(
     const status = error.response?.status;
     const message = error.response?.data?.message;
 
-    const isAuthError =
+    // Only 401 (invalid/expired token) clears the session.
+    // 403 = permission denied — user is still authenticated, do NOT log them out.
+    const isTokenInvalid =
       status === 401 ||
-      status === 403 ||
       message === "Token expired or invalid";
 
-    if (isAuthError) {
+    if (isTokenInvalid) {
       localStorage.removeItem("authToken");
       if (window.location.pathname !== "/login") {
         window.location.href = "/login";

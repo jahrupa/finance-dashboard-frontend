@@ -1,7 +1,7 @@
 import API from "./axios";
 import {
   AUTH_LOGIN,
-  AUTH_REGISTER,
+  // AUTH_REGISTER,
   DASHBOARD_KPIS,
   FINANCE_ACCEPT,
   FINANCE_HOLD,
@@ -74,18 +74,11 @@ export const fetchInvoices = async ({
 };
 // DOWNLOAD SERVICE
 export const downloadFile = async (invoiceId, fileName) => {
-  try {
-    const response = await API.get(
-      DOWNLOAD_DOCUMENT(invoiceId, fileName),
-      {
-        responseType: "blob",
-      }
-    );
+  const response = await API.get(DOWNLOAD_DOCUMENT(invoiceId, fileName), {
+    responseType: "blob",
+  });
 
-    return response; 
-  } catch (error) {
-    throw error;
-  }
+  return response;
 };
 
 export const downloadZipFile = (invoiceId) =>
@@ -364,14 +357,14 @@ export const loginUser = async (credentials) => {
   }
 };
 
-export const registerUser = async (payload) => {
-  try {
-    const res = await API.post(AUTH_REGISTER, payload);
-    return res.data;
-  } catch (error) {
-    throw error.response?.data?.message || "Registration failed";
-  }
-};
+// export const registerUser = async (payload) => {
+//   try {
+//     const res = await API.post(AUTH_REGISTER, payload);
+//     return res.data;
+//   } catch (error) {
+//     throw error.response?.data?.message || "Registration failed";
+//   }
+// };
 
 // ─── User Access ───────────────────────────────────────────────
 export const getAllUserAccess = async () => {
