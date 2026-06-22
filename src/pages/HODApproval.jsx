@@ -5,6 +5,9 @@ import SearchBar from "../components/ui/SearchBar";
 import FilterSelect from "../components/ui/FilterSelect";
 import Pagination from "../components/ui/Pagination";
 import usePagination from "../components/ui/usePagination";
+import DownloadDocsButton from "../components/ui/DownloadDocsButton";
+import { useToast } from "../context/ToastContext";
+import { getErrorMessage, getSuccessMessage } from "../utils/apiMessage";
 
 const HOD_STATUS_OPTIONS = [
   { value: "Pending",   label: "Pending"   },
@@ -15,6 +18,7 @@ const HOD_STATUS_OPTIONS = [
 
 export default function HODApproval() {
   const { getDaysPending } = useInvoices();
+  const toast = useToast();
 
   const [invoices, setInvoices] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -44,7 +48,8 @@ export default function HODApproval() {
           i.status === "HOD Approval"
       );
       setInvoices(filtered);
-    } catch {
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to load invoices."));
       setInvoices([]);
     }
   };
@@ -92,15 +97,17 @@ export default function HODApproval() {
   const openAction = (inv, act) => { setSelected(inv); setAction(act); setRemarks(""); };
 
   const handleConfirm = async () => {
-    if (!remarks && action !== "Approve") { alert("Please provide remarks."); return; }
+    if (!remarks && action !== "Approve") { toast.error("Please provide remarks."); return; }
     try {
       const payload = { remarks: remarks || "" };
-      if (action === "Approve")   await hodApprove(selected.id, payload);
-      if (action === "Reject")    await hodReject(selected.id, payload);
-      if (action === "Send Back") await hodSendBack(selected.id, payload);
+      let res;
+      if (action === "Approve")   res = await hodApprove(selected.id, payload);
+      if (action === "Reject")    res = await hodReject(selected.id, payload);
+      if (action === "Send Back") res = await hodSendBack(selected.id, payload);
       await loadInvoices();
       setSelected(null); setAction(null); setRemarks("");
-    } catch (err) { alert(err); }
+      toast.success(getSuccessMessage(res, `Invoice ${action.toLowerCase()} successful.`));
+    } catch (err) { toast.error(getErrorMessage(err, "Action failed. Please try again.")); }
   };
 
   const getAgeClass = (days) =>
@@ -210,6 +217,7 @@ export default function HODApproval() {
           <table>
             <thead>
               <tr>
+                <th>doc</th>
                 <th>Invoice ID</th>
                 <th>Vendor</th>
                 <th>Department</th>
@@ -238,6 +246,7 @@ export default function HODApproval() {
                   const days = getDaysPending(inv.dateOfReceipt);
                   return (
                     <tr key={inv.id}>
+                      <td><DownloadDocsButton invoice={inv} /></td>
                       <td>{inv.id}</td>
                       <td style={{ fontWeight: 600 }} className="space-remove">{inv.vendor}</td>
                       <td>{inv.department}</td>

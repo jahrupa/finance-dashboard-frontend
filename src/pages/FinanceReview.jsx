@@ -13,6 +13,9 @@ import SearchBar   from "../components/ui/SearchBar";
 import FilterSelect from "../components/ui/FilterSelect";
 import Pagination  from "../components/ui/Pagination";
 import usePagination from "../components/ui/usePagination";
+import DownloadDocsButton from "../components/ui/DownloadDocsButton";
+import { useToast } from "../context/ToastContext";
+import { getErrorMessage, getSuccessMessage } from "../utils/apiMessage";
 
 // ── Constants ─────────────────────────────────────────────────
 const STATUS_OPTIONS = [
@@ -45,6 +48,7 @@ const EMPTY_EDIT_FORM = {
 // ── Component ──────────────────────────────────────────────────
 export default function FinanceReview() {
   const { getDaysPending } = useInvoices();
+  const toast = useToast();
 
   // ── Data ────────────────────────────────────────────────────
   const [invoices, setInvoices] = useState([]);
@@ -75,7 +79,8 @@ export default function FinanceReview() {
       setLoading(true);
       const res = await fetchFinanceInvoices();
       setInvoices(res?.data || []);
-    } catch {
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to load invoices."));
       setInvoices([]);
     } finally {
       setLoading(false);
@@ -136,23 +141,25 @@ export default function FinanceReview() {
   const handleConfirm = async () => {
     if (!selected?.id) return;
     if (action === "Reject" && !formData.remarks) {
-      alert("Rejection reason is mandatory.");
+      toast.error("Rejection reason is mandatory.");
       return;
     }
     if (action === "Accept" && (!formData.glCode || !formData.expenseHead)) {
-      alert("GL Code and Expense Head are required.");
+      toast.error("GL Code and Expense Head are required.");
       return;
     }
     try {
-      if (action === "Accept")  await financeAccept(selected.id, formData);
-      if (action === "Reject")  await financeReject(selected.id, formData);
-      if (action === "Hold")    await financeHold(selected.id, formData);
-      if (action === "Pending") await financePending(selected.id, formData);
+      let res;
+      if (action === "Accept")  res = await financeAccept(selected.id, formData);
+      if (action === "Reject")  res = await financeReject(selected.id, formData);
+      if (action === "Hold")    res = await financeHold(selected.id, formData);
+      if (action === "Pending") res = await financePending(selected.id, formData);
       closeAction();
       await loadInvoices();
+      toast.success(getSuccessMessage(res, `Invoice ${action.toLowerCase()}ed successfully.`));
     } catch (err) {
       console.error(err);
-      alert(typeof err === "string" ? err : "Action failed. Please try again.");
+      toast.error(getErrorMessage(err, "Action failed. Please try again."));
     }
   };
 
@@ -162,7 +169,7 @@ export default function FinanceReview() {
   const openEdit = async (inv) => {
     // Only allow editing when invoice is in Finance's hands
     if (inv.status !== "Pending Review" && inv.status !== "On Hold") {
-      alert(`Cannot edit: invoice is in "${inv.status}" status.\nFinance can only edit Pending Review or On Hold invoices.`);
+      toast.error(`Cannot edit: invoice is in "${inv.status}" status. Finance can only edit Pending Review or On Hold invoices.`);
       return;
     }
     try {
@@ -230,10 +237,13 @@ export default function FinanceReview() {
       const res = await updateFinance(editTarget.id, payload);
       setEditChanges(res?.changes || []);
       await loadInvoices();
+      toast.success(getSuccessMessage(res, "Invoice updated successfully."));
       // Keep modal open briefly to show the "changes saved" confirmation
       setTimeout(closeEdit, 1400);
     } catch (err) {
-      setEditError(typeof err === "string" ? err : "Failed to save changes. Please try again.");
+      const msg = getErrorMessage(err, "Failed to save changes. Please try again.");
+      setEditError(msg);
+      toast.error(msg);
     } finally {
       setEditLoading(false);
     }
@@ -314,7 +324,7 @@ export default function FinanceReview() {
           <table>
             <thead>
               <tr>
-                <th style={{ width: 44 }}>Edit</th>
+                <th style={{ width: 76 }}>Edit / Doc</th>
                 <th>Invoice ID</th>
                 <th>Vendor</th>
                 <th>Invoice No.</th>
@@ -349,21 +359,24 @@ export default function FinanceReview() {
                   const canEdit      = inv.status === "Pending Review" || inv.status === "On Hold";
                   return (
                     <tr key={inv.id}>
-                      {/* ── Edit button ── */}
-                      <td style={{ textAlign: "center" }}>
-                        <button
-                          className="btn btn-outline btn-sm"
-                          style={{
-                            padding: "3px 8px",
-                            fontSize: 14,
-                            opacity: canEdit ? 1 : 0.35,
-                            cursor: canEdit ? "pointer" : "not-allowed",
-                          }}
-                          onClick={() => openEdit(inv)}
-                          title={canEdit ? "Edit invoice details" : `Cannot edit — status is "${inv.status}"`}
-                        >
-                          ✏️
-                        </button>
+                      {/* ── Edit + Download buttons ── */}
+                      <td>
+                        <div className="actions-btn">
+                          <button
+                            className="btn btn-outline btn-sm"
+                            style={{
+                              padding: "3px 8px",
+                              fontSize: 14,
+                              opacity: canEdit ? 1 : 0.35,
+                              cursor: canEdit ? "pointer" : "not-allowed",
+                            }}
+                            onClick={() => openEdit(inv)}
+                            title={canEdit ? "Edit invoice details" : `Cannot edit — status is "${inv.status}"`}
+                          >
+                            ✏️
+                          </button>
+                          <DownloadDocsButton invoice={inv} />
+                        </div>
                       </td>
 
                       <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{inv.id}</td>

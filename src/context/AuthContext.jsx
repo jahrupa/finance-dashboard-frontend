@@ -1,15 +1,22 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import API from "../api/axios";
 import { AUTH_LOGIN } from "../api/endpoints";
+import { decryptData, encryptData } from "../utils/encrypt";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-  const savedUser = localStorage.getItem("user_access");
-  return savedUser ? JSON.parse(savedUser) : null;
+    const savedUser = localStorage.getItem("user_access");
+
+    return savedUser ? decryptData(savedUser) : null;
+  });
+
+  const [token, setToken] = useState(() => {
+  const encryptedToken = localStorage.getItem("authToken");
+
+  return decryptData(encryptedToken);
 });
-  const [token, setToken]     = useState(() => localStorage.getItem("authToken"));
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
 
@@ -46,23 +53,46 @@ export function AuthProvider({ children }) {
   //   initAuth();
   // }, []);
 
-  const login = useCallback(async ({ email, password }) => {
+const login = useCallback(async ({ email, password }) => {
     setAuthError(null);
+
     try {
-      const res = await API.post(AUTH_LOGIN, { email, password });
+      const res = await API.post(AUTH_LOGIN, {
+        email,
+        password,
+      });
+
       const { token: newToken, user: userData } = res.data;
-      localStorage.setItem("authToken", newToken);
-      localStorage.setItem("user_access", JSON.stringify(userData));
+
+      // SAVE ENCRYPTED TOKEN
+      localStorage.setItem(
+        "authToken",
+        encryptData(newToken)
+      );
+
+      // SAVE ENCRYPTED USER
+      localStorage.setItem(
+        "user_access",
+        encryptData(userData)
+      );
+
+      // UPDATE STATE
       setToken(newToken);
       setUser(userData);
+
       return { success: true };
     } catch (err) {
       const msg =
         err.response?.data?.message ||
         err.response?.data?.error ||
         "Login failed. Please check your credentials.";
+
       setAuthError(msg);
-      return { success: false, message: msg };
+
+      return {
+        success: false,
+        message: msg,
+      };
     }
   }, []);
 
@@ -85,14 +115,18 @@ export function AuthProvider({ children }) {
   //   }
   // }, []);
 
+   // LOGOUT
   const logout = useCallback(() => {
     localStorage.removeItem("authToken");
     localStorage.removeItem("user_access");
+
     setToken(null);
     setUser(null);
   }, []);
 
-  const clearError = useCallback(() => setAuthError(null), []);
+  const clearError = useCallback(() => {
+    setAuthError(null);
+  }, []);
 
   // Authenticated = token exists in state (loaded from localStorage on init)
   const isAuthenticated = Boolean(token);

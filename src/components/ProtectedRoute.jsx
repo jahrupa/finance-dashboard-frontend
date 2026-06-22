@@ -2,7 +2,7 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 /**
- * Wraps private routes — redirects to /login if not authenticated.
+ * Wraps private routes — redirects to / if not authenticated.
  * Preserves the intended destination via location state so after login
  * the user is sent back to where they tried to go.
  */
@@ -20,7 +20,7 @@ export default function ProtectedRoute() {
   // }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <Navigate to="/" state={{ from: location }} replace />;
   }
 
   return <Outlet />;

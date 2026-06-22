@@ -254,7 +254,7 @@ export default function RegisterPage() {
 
         <p className="auth-switch">
           Already have an account?{" "}
-          <Link to="/login" className="auth-link">
+          <Link to="/" className="auth-link">
             Sign in
           </Link>
         </p>

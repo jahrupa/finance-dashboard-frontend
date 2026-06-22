@@ -1,4 +1,5 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+import { fetchVendors } from "../api/Service";
 
 const InvoiceContext = createContext();
 
@@ -222,7 +223,22 @@ const VENDORS = [
 
 export function InvoiceProvider({ children }) {
   const [invoices, setInvoices] = useState(INITIAL_INVOICES);
+  const [vendors, setVendors] = useState([]);
 
+useEffect(() => {
+  const fetchInvoices = async () => {
+    try {
+      const response = await fetchVendors();
+      console.log(response?.data,'response');
+      setVendors(response?.data || []);
+    } catch (error) {
+      console.error("Error fetching vendors:", error);
+    }
+  }
+    fetchInvoices();
+
+    // Simulate API call to fetch invoices
+},[])
   const addInvoice = (inv) => {
     const newInv = {
       ...inv,
@@ -317,7 +333,6 @@ export function InvoiceProvider({ children }) {
   };
 
   const getDaysPending = (dateOfReceipt) => {
-    console.log(dateOfReceipt,'dateOfReceipt')
     const receipt = new Date(dateOfReceipt);
     const today = new Date();
     return Math.floor((today - receipt) / (1000 * 60 * 60 * 24));
@@ -360,6 +375,7 @@ export function InvoiceProvider({ children }) {
         getAgingBucket,
         DEPARTMENTS,
         VENDORS,
+        vendors,
       }}
     >
       {children}

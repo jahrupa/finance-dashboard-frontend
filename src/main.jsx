@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { ToastProvider } from "./context/ToastContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import App from "./App.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
@@ -10,10 +11,11 @@ import RegisterPage from "./pages/RegisterPage.jsx";
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
-      <AuthProvider>
+      <ToastProvider>
+        <AuthProvider>
         <Routes>
           {/* Public routes */}
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
 
           {/* Protected routes — wrapped by ProtectedRoute */}
@@ -26,7 +28,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <Route path="/payment-processing" element={<App />} />
             <Route path="/user-access" element={<App />} />
             {/* <Route path="/user-access/:id" element={<App />} /> */}
-            <Route path="/user-list" element={<App />} />
+            <Route path="/vendor" element={<App />} />
             <Route path="/user-management" element={<App />} />
             <Route path="/activity-logs" element={<App />} />
             <Route path="/user-wise-data" element={<App />} />
@@ -35,7 +37,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </AuthProvider>
+        </AuthProvider>
+      </ToastProvider>
     </BrowserRouter>
   </React.StrictMode>,
 );

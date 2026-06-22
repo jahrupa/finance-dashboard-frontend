@@ -44,7 +44,6 @@ export const dashboardApi = {
       this.getMonthlyTrends(months),
       this.getTopVendors(10),
     ]);
-console.log(kpiRes,'kpiRes')
     return {
       kpis:          kpiRes.data,
       aging:         agingRes.data,

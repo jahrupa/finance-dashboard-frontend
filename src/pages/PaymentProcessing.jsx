@@ -1,10 +1,13 @@
 import { useEffect, useState, useMemo } from "react";
-import { useInvoices } from "../context/InvoiceContext";
+// import { useInvoices } from "../context/InvoiceContext";
 import { fetchPaymentApprovalInvoices, processPaymentAPI } from "../api/Service";
 import SearchBar from "../components/ui/SearchBar";
 import FilterSelect from "../components/ui/FilterSelect";
 import Pagination from "../components/ui/Pagination";
 import usePagination from "../components/ui/usePagination";
+import DownloadDocsButton from "../components/ui/DownloadDocsButton";
+import { useToast } from "../context/ToastContext";
+import { getErrorMessage, getSuccessMessage } from "../utils/apiMessage";
 
 const PAYMENT_MODE_OPTIONS = ["NEFT", "RTGS", "Cheque", "IMPS"];
 const PRIORITY_OPTIONS     = [
@@ -14,11 +17,13 @@ const PRIORITY_OPTIONS     = [
 ];
 
 export default function PaymentProcessing() {
-  const { getDaysPending } = useInvoices();
+  // const { getDaysPending } = useInvoices();
+  const toast = useToast();
 
   const [invoices, setInvoices] = useState([]);
   const [selected, setSelected] = useState(null);
   const [bankRef,  setBankRef]  = useState("");
+  const [processing, setProcessing] = useState(false);
   const [filter,   setFilter]   = useState("pending");
 
   // ── filters ───────────────────────────────────────────────
@@ -28,14 +33,19 @@ export default function PaymentProcessing() {
 
   const { page, pageSize, setPage, setPageSize, resetPage, paginate } = usePagination(10);
 
-  useEffect(() => { loadInvoices(); }, []);
-
   const loadInvoices = async () => {
     try {
       const res = await fetchPaymentApprovalInvoices();
       setInvoices(res?.data || []);
-    } catch { setInvoices([]); }
+    } catch (error) {
+      console.error(error);
+      toast.error(getErrorMessage(error, "Failed to load invoices."));
+      setInvoices([]);
+    }
   };
+
+  useEffect(() => { loadInvoices(); }, []);
+
 
   const readyToPay = invoices.filter((i) => i.paymentApprovalStatus === "Approved" && i.paymentStatus !== "Processed");
   const paid       = invoices.filter((i) => i.paymentStatus === "Processed");
@@ -55,12 +65,25 @@ export default function PaymentProcessing() {
   const handleFilterChange = (setter) => (val) => { setter(val); resetPage(); };
 
   const handleProcess = async () => {
-    if (!bankRef.trim()) { alert("Bank Reference Number is required."); return; }
+    if (!bankRef.trim()) { toast.error("Bank Reference Number is required."); return; }
+    setProcessing(true);
     try {
-      await processPaymentAPI(selected.id, bankRef);
+      const res = await processPaymentAPI(selected.id, bankRef.trim());
       await loadInvoices();
+      toast.success(
+        getSuccessMessage(
+          res,
+          selected.vendorEmail
+            ? `Payment processed. A confirmation email has been sent to ${selected.vendorEmail}.`
+            : "Payment processed. No vendor email on record, so no confirmation email was sent.",
+        ),
+      );
       setSelected(null); setBankRef("");
-    } catch (err) { alert(err); }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Payment processing failed. Please try again."));
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const isOverdue = (d) => d && new Date(d) < new Date();
@@ -137,6 +160,7 @@ export default function PaymentProcessing() {
           <table>
             <thead>
               <tr>
+                <th>Doc</th>
                 <th>Invoice ID</th><th>Vendor</th><th>Department</th>
                 <th>Amount (₹)</th><th style={{ color: "var(--accent)" }}>📅 Date of Receipt</th>
                 <th>Due Date</th><th>Payment Mode</th><th>Priority</th>
@@ -157,6 +181,8 @@ export default function PaymentProcessing() {
                   const overdue = isOverdue(inv.dueDate) && filter === "pending";
                   return (
                     <tr key={inv.id} style={overdue ? { background: "#fff5f5" } : {}}>
+                      <td><DownloadDocsButton invoice={inv} /></td>
+
                       <td>{overdue && <span style={{ color: "var(--danger)", marginRight: 4 }}>🚨</span>}{inv.id}</td>
                       <td style={{ fontWeight: 600 }}>{inv.vendor}</td>
                       <td>{inv.department}</td>
@@ -218,6 +244,22 @@ export default function PaymentProcessing() {
                 </div>
               </div>
               <div className="form-group">
+                <label className="form-label">Vendor Email (confirmation recipient)</label>
+                <input className="form-control" value={selected?.vendorEmail || ""} readOnly
+                  placeholder="No vendor email on record"
+                  style={{ fontFamily: "monospace", letterSpacing: "0.5px", background: "#f9fafb" }} />
+                {selected?.vendorEmail ? (
+                  <small style={{ color: "var(--text-muted)" }}>
+                    📧 A payment confirmation email will be sent to this vendor on processing.
+                  </small>
+                ) : (
+                  <small style={{ color: "var(--danger)" }}>
+                    ⚠️ No vendor email on record — no confirmation email will be sent.
+                  </small>
+                )}
+              </div>
+
+              <div className="form-group">
                 <label className="form-label">Bank Reference Number <span className="required">*</span></label>
                 <input className="form-control" value={bankRef} onChange={(e) => setBankRef(e.target.value)}
                   placeholder="e.g. HDFC2024010800821" style={{ fontFamily: "monospace", letterSpacing: "0.5px" }} />
@@ -227,8 +269,10 @@ export default function PaymentProcessing() {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setSelected(null)}>Cancel</button>
-              <button className="btn btn-success" onClick={handleProcess}>✅ Confirm Payment Processed</button>
+              <button className="btn btn-outline" onClick={() => setSelected(null)} disabled={processing}>Cancel</button>
+              <button className="btn btn-success" onClick={handleProcess} disabled={processing}>
+                {processing ? "Processing…" : "✅ Confirm Payment Processed"}
+              </button>
             </div>
           </div>
         </div>

@@ -4,6 +4,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import "../styles/UserAccessForm.css";
 import { createUser, createUserAccess, fetchUserById, updateUser, updateUserAccess } from "../api/Service";
 import { useInvoices } from "../context/InvoiceContext";
+import { useToast } from "../context/ToastContext";
+import { getErrorMessage, getSuccessMessage } from "../utils/apiMessage";
+import { decryptData } from "../utils/encrypt";
 
 const defaultCrud = {
   create: false,
@@ -37,6 +40,7 @@ const CRUD_OPERATIONS = ["create", "read", "update", "delete"];
 function UserAccessForm() {
   const navigate = useNavigate();
   const { DEPARTMENTS } = useInvoices();
+  const toast = useToast();
   const { id } = useParams();
   const isEdit = Boolean(id);
 
@@ -54,7 +58,8 @@ function UserAccessForm() {
       };
     }
 
-    const users = JSON.parse(localStorage.getItem("user_access") || "[]");
+    const encyptedUser = localStorage.getItem("user_access"); // const users = JSON.parse(localStorage.getItem("user_access") || "[]");
+    const users = decryptData(encyptedUser)
     const existing = users.find((u) => String(u.id) === String(id));
 
     if (!existing) {
@@ -100,12 +105,14 @@ function UserAccessForm() {
         });
       } catch (err) {
         console.error("Failed to load user", err);
+        toast.error(getErrorMessage(err, "Failed to load user details."));
       } finally {
         setLoading(false);
       }
     };
 
     loadUser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isEdit]);
   const [form, setForm] = useState(getInitialForm);
   const [loading, setLoading] = useState(false);
@@ -227,20 +234,23 @@ function UserAccessForm() {
     try {
       setLoading(true);
 
+      let res;
       if (isEdit) {
         delete payload.password;
-        await updateUser(id, payload);
+        res = await updateUser(id, payload);
       } else {
-        await createUser(payload);
+        res = await createUser(payload);
       }
 
-      navigate("/user-list");
+      toast.success(
+        getSuccessMessage(res, isEdit ? "User updated successfully." : "User created successfully."),
+      );
+      navigate("/user-management");
     } catch (error) {
       console.error("User Access Save Failed:", error);
-      setErrors((prev) => ({
-        ...prev,
-        submit: error?.message || "Something went wrong",
-      }));
+      const msg = getErrorMessage(error, "Something went wrong");
+      setErrors((prev) => ({ ...prev, submit: msg }));
+      toast.error(msg);
     } finally {
       setLoading(false);
     }

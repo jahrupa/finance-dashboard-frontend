@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useInvoices } from "../context/InvoiceContext";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
+import { getErrorMessage, getSuccessMessage } from "../utils/apiMessage";
 import {
   createInvoice,
   deleteInvoice,
@@ -17,7 +19,6 @@ import usePagination from "../components/ui/usePagination";
 
 // Base URL for document downloads — strip trailing slash
 
-
 const STATUS_COLORS = {
   "Pending Review": "badge-blue",
   "Under Review": "badge-cyan",
@@ -31,6 +32,7 @@ const STATUS_COLORS = {
 
 const EMPTY_FORM = {
   vendor: "",
+  vendorEmail: "",
   invoiceNo: "",
   invoiceDate: "",
   amount: "",
@@ -41,16 +43,16 @@ const EMPTY_FORM = {
   remarks: "",
 };
 const TAX_TYPE_OPTIONS = [
-  { value: "GST Invoice",      label: "GST Invoice"      },
-  { value: "Non GST Invoice",  label: "Non GST Invoice"  },
+  { value: "GST Invoice", label: "GST Invoice" },
+  { value: "Non GST Invoice", label: "Non GST Invoice" },
   { value: "Proforma Invoice", label: "Proforma Invoice" },
-  { value: "Advance Voucher",  label: "Advance Voucher"  },
+  { value: "Advance Voucher", label: "Advance Voucher" },
 ];
 // ── Filename helpers (module-level) ──────────────────────────
 // Extract just the filename from a stored path (no subdirs expected, but safe)
 const getFileName = (docPath) => {
   if (!docPath) return "";
-  return docPath.split("/").pop();            // handles "folder/file.pdf" or "file.pdf"
+  return docPath.split("/").pop(); // handles "folder/file.pdf" or "file.pdf"
 };
 
 // "1779183565_file-sample_150kB.pdf"  →  "file-sample_150kB.pdf"
@@ -62,11 +64,15 @@ const friendlyName = (docPath) => {
   return underscore !== -1 ? fileName.slice(underscore + 1) : fileName;
 };
 
-
-export default function InvoiceSubmission({ userDepartment = null, isAdmin = true }) {
-  const { getDaysPending, DEPARTMENTS, VENDORS } = useInvoices();
+export default function InvoiceSubmission({
+  userDepartment = null,
+  isAdmin = true,
+}) {
+  const { getDaysPending, DEPARTMENTS, VENDORS, vendors } = useInvoices();
   // Issue 3 fix: get logged-in user to auto-fill uploadedBy and department
+  console.log(vendors, "vendors");
   const { user } = useAuth();
+  const toast = useToast();
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [showForm, setShowForm] = useState(false);
@@ -74,19 +80,27 @@ export default function InvoiceSubmission({ userDepartment = null, isAdmin = tru
   // Issue 3 fix: auto-populate uploadedBy and department whenever user changes or form opens
   useEffect(() => {
     if (user) {
-      setForm(prev => ({
+      setForm((prev) => ({
         ...prev,
         uploadedBy: user.name || prev.uploadedBy,
         // Non-admins are locked to their own department
-        department: (!isAdmin && user.department) ? user.department : prev.department,
+        department:
+          !isAdmin && user.department ? user.department : prev.department,
       }));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, showForm]);
 
   // If a non-admin user has a department, lock the dept filter to their department
-  const [filter, setFilter] = useState({ dept: userDepartment || "", status: "", search: "", fromDate: "", toDate: "" });
-  const { page, pageSize, setPage, setPageSize, resetPage, paginate } = usePagination(10);
+  const [filter, setFilter] = useState({
+    dept: userDepartment || "",
+    status: "",
+    search: "",
+    fromDate: "",
+    toDate: "",
+  });
+  const { page, pageSize, setPage, setPageSize, resetPage, paginate } =
+    usePagination(10);
   const [submitted, setSubmitted] = useState(false);
   const [invoices, setInvoices] = useState([]);
   const [action, setAction] = useState({ edit: false, id: null });
@@ -103,42 +117,45 @@ export default function InvoiceSubmission({ userDepartment = null, isAdmin = tru
     try {
       const params = {};
       // Non-admin users are always scoped to their department
-      const dept = (!isAdmin && userDepartment) ? userDepartment : f.dept;
-      if (dept)       params.department = dept;
-      if (f.status)   params.status     = f.status;
-      if (f.search)   params.search     = f.search;
-      if (f.fromDate) params.fromDate   = f.fromDate;
-      if (f.toDate)   params.toDate     = f.toDate;
+      const dept = !isAdmin && userDepartment ? userDepartment : f.dept;
+      if (dept) params.department = dept;
+      if (f.status) params.status = f.status;
+      if (f.search) params.search = f.search;
+      if (f.fromDate) params.fromDate = f.fromDate;
+      if (f.toDate) params.toDate = f.toDate;
       const res = await fetchInvoices(params);
       setInvoices(res?.data || []);
     } catch (err) {
       console.error("Error fetching invoices:", err);
+      toast.error(getErrorMessage(err, "Failed to load invoices."));
       setInvoices([]);
     }
   };
-useEffect(() => {
-  let isMounted = true;
+  useEffect(() => {
+    let isMounted = true;
 
-  const fetchData = async () => {
-    try {
-      const res = await fetchInvoices();
-      if (isMounted) {
-        setInvoices(res?.data || []);
+    const fetchData = async () => {
+      try {
+        const res = await fetchInvoices();
+        if (isMounted) {
+          setInvoices(res?.data || []);
+        }
+      } catch (err) {
+        console.error("Fetch error:", err);
+        if (isMounted) {
+          toast.error(getErrorMessage(err, "Failed to load invoices."));
+          setInvoices([]);
+        }
       }
-    } catch (err) {
-      console.error("Fetch error:", err);
-      if (isMounted) {
-        setInvoices([]);
-      }
-    }
-  };
+    };
 
-  fetchData();
+    fetchData();
 
-  return () => {
-    isMounted = false;
-  };
-}, []);
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ─── Form input change ───────────────────────────────────────
   const handleChange = (e) =>
@@ -150,9 +167,10 @@ useEffect(() => {
       const res = await fetchInvoiceById(id);
       const data = res?.data;
       if (!data) return;
-
+      const selectedVendor = vendors.find((v) => v.name === data.vendor);
       setForm({
         vendor: data.vendor || "",
+        vendorEmail: data.vendorEmail || selectedVendor?.email || "",
         invoiceNo: data.invoiceNo || "",
         invoiceDate: data.invoiceDate?.split("T")[0] || "",
         amount: data.amount || "",
@@ -177,6 +195,7 @@ useEffect(() => {
       setShowForm(true);
     } catch (err) {
       console.error("Edit fetch error:", err);
+      toast.error(getErrorMessage(err, "Failed to load invoice details."));
     }
   };
 
@@ -197,13 +216,14 @@ useEffect(() => {
   const handleSubmit = async () => {
     if (
       !form.vendor ||
+      // !form.vendorEmail ||
       !form.invoiceNo ||
       !form.invoiceDate ||
       !form.amount ||
       !form.department ||
       !form.uploadedBy
     ) {
-      alert("Please fill all required fields.");
+      toast.error("Please fill all required fields.");
       return;
     }
     try {
@@ -212,21 +232,29 @@ useEffect(() => {
       newFiles.forEach((file) => formData.append("documents", file));
 
       // Tell the server which existing docs to keep / remove
+      let res;
       if (action.edit) {
         const keepDocs = existingDocs.filter((d) => !docsToRemove.includes(d));
         keepDocs.forEach((d) => formData.append("keepDocuments", d));
         docsToRemove.forEach((d) => formData.append("removeDocuments", d));
-        await updateInvoice(action.id, formData);
+        res = await updateInvoice(action.id, formData);
       } else {
-        await createInvoice(formData);
+        res = await createInvoice(formData);
       }
 
       await loadInvoices();
       closeModal();
+      toast.success(
+        getSuccessMessage(
+          res,
+          action.edit ? "Invoice updated successfully." : "Invoice submitted successfully.",
+        ),
+      );
       setSubmitted(true);
       setTimeout(() => setSubmitted(false), 3000);
     } catch (err) {
       console.error("Submit error:", err);
+      toast.error(getErrorMessage(err, "Failed to save invoice. Please try again."));
     }
   };
 
@@ -234,10 +262,12 @@ useEffect(() => {
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this invoice?")) return;
     try {
-      await deleteInvoice(id);
+      const res = await deleteInvoice(id);
       await loadInvoices();
+      toast.success(getSuccessMessage(res, "Invoice deleted successfully."));
     } catch (err) {
       console.error(err);
+      toast.error(getErrorMessage(err, "Failed to delete invoice."));
     }
   };
 
@@ -260,40 +290,40 @@ useEffect(() => {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Download error:", err);
-      alert("Unable to download document. Please try again.");
+      toast.error(getErrorMessage(err, "Unable to download document. Please try again."));
     }
   };
 
   // Download all docs for an invoice as a ZIP
-const handleDownloadZip = async (invoiceId) => {
-  if (!invoiceId || typeof invoiceId !== "string") {
-    console.error("Invalid invoiceId:", invoiceId);
-    return;
-  }
+  const handleDownloadZip = async (invoiceId) => {
+    if (!invoiceId || typeof invoiceId !== "string") {
+      console.error("Invalid invoiceId:", invoiceId);
+      return;
+    }
 
-  try {
-    const response = await downloadZipFile(invoiceId);
+    try {
+      const response = await downloadZipFile(invoiceId);
 
-    const blob = new Blob([response.data], {
-      type: "application/zip",
-    });
+      const blob = new Blob([response.data], {
+        type: "application/zip",
+      });
 
-    const url = window.URL.createObjectURL(blob);
+      const url = window.URL.createObjectURL(blob);
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `invoice-documents.zip`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `invoice-documents.zip`;
 
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
 
-    window.URL.revokeObjectURL(url);
-  } catch (err) {
-    console.error("ZIP download error:", err);
-    alert("Unable to download ZIP file.");
-  }
-};
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("ZIP download error:", err);
+      toast.error(getErrorMessage(err, "Unable to download ZIP file."));
+    }
+  };
 
   // ─── Close modal ─────────────────────────────────────────────
   const closeModal = () => {
@@ -307,17 +337,18 @@ const handleDownloadZip = async (invoiceId) => {
 
   // ─── Filters ─────────────────────────────────────────────────
   const filtered = invoices.filter((inv) => {
-    const matchDept   = !filter.dept   || inv.department === filter.dept;
-    const matchStatus = !filter.status || inv.status     === filter.status;
+    const matchDept = !filter.dept || inv.department === filter.dept;
+    const matchStatus = !filter.status || inv.status === filter.status;
     const matchSearch =
       !filter.search ||
       inv.vendor?.toLowerCase().includes(filter.search.toLowerCase()) ||
       inv.invoiceNo?.toLowerCase().includes(filter.search.toLowerCase()) ||
       inv.id?.toLowerCase().includes(filter.search.toLowerCase());
     // Date range: compare invoice_date string lexicographically (ISO format)
-    const invDate     = inv.invoiceDate ? inv.invoiceDate.split("T")[0] : "";
-    const matchFrom   = !filter.fromDate || (invDate && invDate >= filter.fromDate);
-    const matchTo     = !filter.toDate   || (invDate && invDate <= filter.toDate);
+    const invDate = inv.invoiceDate ? inv.invoiceDate.split("T")[0] : "";
+    const matchFrom =
+      !filter.fromDate || (invDate && invDate >= filter.fromDate);
+    const matchTo = !filter.toDate || (invDate && invDate <= filter.toDate);
     return matchDept && matchStatus && matchSearch && matchFrom && matchTo;
   });
 
@@ -387,30 +418,53 @@ const handleDownloadZip = async (invoiceId) => {
           // className="form-control search-input"
           placeholder="🔍 Search vendor, invoice no, ID..."
           value={filter.search}
-          onChange={(v) => { setFilter((p) => ({ ...p, search: v })); resetPage(); }}
+          onChange={(v) => {
+            setFilter((p) => ({ ...p, search: v }));
+            resetPage();
+          }}
 
-        // value={filter.search}
-        // onChange={(v) => { setFilter((p) => ({ ...p, search: v })); resetPage(); }}
-        // placeholder="Search vendor, invoice no, ID..."
-        // className="form-control search-input"
+          // value={filter.search}
+          // onChange={(v) => { setFilter((p) => ({ ...p, search: v })); resetPage(); }}
+          // placeholder="Search vendor, invoice no, ID..."
+          // className="form-control search-input"
         />
         <FilterSelect
           value={filter.dept}
-          onChange={(v) => { if (!userDepartment || isAdmin) { setFilter((p) => ({ ...p, dept: v })); resetPage(); } }}
+          onChange={(v) => {
+            if (!userDepartment || isAdmin) {
+              setFilter((p) => ({ ...p, dept: v }));
+              resetPage();
+            }
+          }}
           options={DEPARTMENTS}
-          placeholder={userDepartment && !isAdmin ? `Dept: ${userDepartment}` : "All Departments"}
+          placeholder={
+            userDepartment && !isAdmin
+              ? `Dept: ${userDepartment}`
+              : "All Departments"
+          }
           className="form-control"
           disabled={!isAdmin && Boolean(userDepartment)}
         />
         <FilterSelect
           value={filter.status}
-          onChange={(v) => { setFilter((p) => ({ ...p, status: v })); resetPage(); }}
+          onChange={(v) => {
+            setFilter((p) => ({ ...p, status: v }));
+            resetPage();
+          }}
           options={allStatuses}
           placeholder="All Statuses"
         />
         {/* ── Date range pickers ─────────────────────────────── */}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" }}>From</span>
+          <span
+            style={{
+              fontSize: 12,
+              color: "var(--text-muted)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            From
+          </span>
           <input
             type="date"
             className="form-control"
@@ -441,14 +495,23 @@ const handleDownloadZip = async (invoiceId) => {
             <button
               className="btn btn-outline"
               style={{ fontSize: 11, padding: "3px 8px", whiteSpace: "nowrap" }}
-              onClick={() => { setFilter((p) => ({ ...p, fromDate: "", toDate: "" })); resetPage(); }}
+              onClick={() => {
+                setFilter((p) => ({ ...p, fromDate: "", toDate: "" }));
+                resetPage();
+              }}
               title="Clear date range"
             >
               ✕ Clear dates
             </button>
           )}
         </div>
-        <span style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+        <span
+          style={{
+            fontSize: 12,
+            color: "var(--text-muted)",
+            whiteSpace: "nowrap",
+          }}
+        >
           {filtered.length} records
         </span>
       </div>
@@ -501,36 +564,35 @@ const handleDownloadZip = async (invoiceId) => {
                             ✏️
                           </button>
 
-                            <button
-                              className="download-doc-btn"
-                              title={
-                                rowDocs.length > 1
-                                  ? `Download ${rowDocs.length} documents as ZIP`
-                                  : `Download ${friendlyName(rowDocs[0])}`
-                              }
-                              onClick={() => handleDownloadZip(inv.id)}
+                          <button
+                            className="download-doc-btn"
+                            title={
+                              rowDocs.length > 1
+                                ? `Download ${rowDocs.length} documents as ZIP`
+                                : `Download ${friendlyName(rowDocs[0])}`
+                            }
+                            onClick={() => handleDownloadZip(inv.id)}
+                          >
+                            <svg
+                              width="11"
+                              height="11"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
                             >
-                              <svg
-                                width="11"
-                                height="11"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2.2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                <polyline points="7 10 12 15 17 10" />
-                                <line x1="12" y1="15" x2="12" y2="3" />
-                              </svg>
-                              {rowDocs.length > 0 && (
-                                <span className="doc-count-badge">
-                                  {rowDocs.length}
-                                </span>
-                              )}
-                            </button>
-                         
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                              <polyline points="7 10 12 15 17 10" />
+                              <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                            {rowDocs.length > 0 && (
+                              <span className="doc-count-badge">
+                                {rowDocs.length}
+                              </span>
+                            )}
+                          </button>
 
                           {/* Delete */}
                           <button
@@ -595,19 +657,49 @@ const handleDownloadZip = async (invoiceId) => {
                 {/* Vendor */}
                 <div className="form-group">
                   <label className="form-label">Vendor Name *</label>
-                  <input
+
+                  <select
                     name="vendor"
                     className="form-control"
                     value={form.vendor}
-                    onChange={handleChange}
-                    placeholder="e.g. TechCorp Solutions"
-                    list="vendor-list"
-                  />
-                  <datalist id="vendor-list">
-                    {VENDORS.map((v) => (
-                      <option key={v} value={v} />
+                    onChange={(e) => {
+                      const selectedVendor = vendors.find(
+                        (v) => v.name === e.target.value,
+                      );
+
+                      setForm((prev) => ({
+                        ...prev,
+                        vendor: e.target.value,
+                        vendorEmail: selectedVendor?.email || "", // auto set
+                      }));
+                    }}
+                  >
+                    <option value="">-- Select Vendor --</option>
+
+                    {vendors.map((v) => (
+                      <option key={v.id} value={v.name}>
+                        {v.name}
+                      </option>
                     ))}
-                  </datalist>
+                  </select>
+                </div>
+
+                {/* Vendor Email — recipient of payment-processed notification */}
+                <div className="form-group">
+                  <label className="form-label">Vendor Email</label>
+                  <input
+                    type="email"
+                    name="vendorEmail"
+                    className="form-control"
+                    placeholder="vendor@example.com"
+                    value={form.vendorEmail}
+                    onChange={handleChange}
+                  />
+                  {form.vendor && !form.vendorEmail && (
+                    <p style={{ fontSize: 11, color: "var(--danger)", marginTop: 3 }}>
+                      ⚠️ No email on record for this vendor — the payment confirmation email cannot be sent unless you enter one.
+                    </p>
+                  )}
                 </div>
 
                 {/* Invoice No */}
@@ -645,17 +737,25 @@ const handleDownloadZip = async (invoiceId) => {
                         return d.toISOString().split("T")[0];
                       })();
                       if (chosen < minDate) {
-                        alert(`Invoice date cannot be older than 365 days. Earliest allowed: ${minDate}`);
+                        toast.error(
+                          `Invoice date cannot be older than 365 days. Earliest allowed: ${minDate}`,
+                        );
                         return;
                       }
                       if (chosen > new Date().toISOString().split("T")[0]) {
-                        alert("Invoice date cannot be a future date.");
+                        toast.error("Invoice date cannot be a future date.");
                         return;
                       }
                       handleChange(e);
                     }}
                   />
-                  <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }}>
+                  <p
+                    style={{
+                      fontSize: 11,
+                      color: "var(--text-muted)",
+                      marginTop: 3,
+                    }}
+                  >
                     Invoices older than 365 days cannot be submitted.
                   </p>
                 </div>
@@ -682,7 +782,11 @@ const handleDownloadZip = async (invoiceId) => {
                       className="form-control"
                       value={user.department}
                       readOnly
-                      style={{ background: "#f8fafc", color: "#475569", cursor: "not-allowed" }}
+                      style={{
+                        background: "#f8fafc",
+                        color: "#475569",
+                        cursor: "not-allowed",
+                      }}
                     />
                   ) : (
                     <select
@@ -708,7 +812,11 @@ const handleDownloadZip = async (invoiceId) => {
                     className="form-control"
                     value={user?.name || form.uploadedBy || ""}
                     readOnly
-                    style={{ background: "#f8fafc", color: "#475569", cursor: "not-allowed" }}
+                    style={{
+                      background: "#f8fafc",
+                      color: "#475569",
+                      cursor: "not-allowed",
+                    }}
                   />
                 </div>
 
@@ -725,7 +833,7 @@ const handleDownloadZip = async (invoiceId) => {
                 </div>
 
                 {/* Tax */}
-                  {/* Tax Type — dropdown, not free text */}
+                {/* Tax Type — dropdown, not free text */}
                 <div className="form-group">
                   <label className="form-label">Tax Type</label>
                   <select
@@ -736,7 +844,9 @@ const handleDownloadZip = async (invoiceId) => {
                   >
                     <option value="">— Select Tax Type —</option>
                     {TAX_TYPE_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
                     ))}
                   </select>
                   {/* {editTarget.taxDetails && editForm.taxDetails !== editTarget.taxDetails && (
@@ -850,7 +960,7 @@ const handleDownloadZip = async (invoiceId) => {
                       (f) => f.type === "application/pdf",
                     );
                     if (valid.length !== selected.length)
-                      alert("Only PDF files allowed");
+                      toast.error("Only PDF files allowed");
                     setNewFiles((prev) => {
                       // Avoid duplicate filenames
                       const existingNames = new Set(prev.map((f) => f.name));

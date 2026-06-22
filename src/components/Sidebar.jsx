@@ -5,12 +5,11 @@ import { useCRUD } from "../hook/useCRUD";
 
 export default function Sidebar({ pages, activePage, setActivePage }) {
   const { user, logout } = useAuth();
-  console.log(user,'user')
   const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
-    navigate("/login", { replace: true });
+    navigate("/", { replace: true });
   };
 
   const initials = user?.name

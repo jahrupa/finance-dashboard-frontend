@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 import "./Auth.css";
 
 export default function LoginPage() {
   const { login, isAuthenticated, authError, clearError, loading } = useAuth();
+  const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -43,7 +45,10 @@ export default function LoginPage() {
     const result = await login(form);
     setSubmitting(false);
     if (result.success) {
+      toast.success("Logged in successfully.");
       navigate(from, { replace: true });
+    } else {
+      toast.error(result.message || "Login failed. Please check your credentials.");
     }
   };
 

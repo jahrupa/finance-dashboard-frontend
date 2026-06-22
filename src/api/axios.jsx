@@ -1,4 +1,5 @@
 import axios from "axios";
+import { decryptData } from "../utils/encrypt";
 
 const baseURL = import.meta.env.VITE_API_BASE_URL;
 
@@ -14,15 +15,20 @@ const API = axios.create({
 // Request interceptor — attach Bearer token from localStorage
 API.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("authToken");
+    // Get encrypted token from localStorage
+    const encryptedToken = localStorage.getItem("authToken");
+
+    // Decrypt token
+    const token = decryptData(encryptedToken);
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
     return config;
   },
-  (error) => Promise.reject(error),
+  (error) => Promise.reject(error)
 );
-
 // Response interceptor — ONLY redirect on explicit auth rejection (401/403)
 // Never redirect on network errors or 5xx — that would log users out unfairly
 API.interceptors.response.use(
@@ -39,8 +45,8 @@ API.interceptors.response.use(
 
     if (isTokenInvalid) {
       localStorage.removeItem("authToken");
-      if (window.location.pathname !== "/login") {
-        window.location.href = "/login";
+      if (window.location.pathname !== "/") {
+        window.location.href = "/"; // Redirect to login page
       }
     }
 

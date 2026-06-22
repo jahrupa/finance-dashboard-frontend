@@ -11,6 +11,9 @@ import SearchBar from "../components/ui/SearchBar";
 import FilterSelect from "../components/ui/FilterSelect";
 import Pagination from "../components/ui/Pagination";
 import usePagination from "../components/ui/usePagination";
+import DownloadDocsButton from "../components/ui/DownloadDocsButton";
+import { useToast } from "../context/ToastContext";
+import { getErrorMessage, getSuccessMessage } from "../utils/apiMessage";
 
 const PRIORITY_OPTIONS = [
   { value: "High",   label: "High"   },
@@ -20,6 +23,7 @@ const PRIORITY_OPTIONS = [
 
 export default function PaymentApproval() {
   const { getDaysPending } = useInvoices();
+  const toast = useToast();
 
   const [invoices, setInvoices] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -41,7 +45,10 @@ export default function PaymentApproval() {
     try {
       const res = await fetchPaymentApprovalInvoices();
       setInvoices(res?.data || []);
-    } catch { setInvoices([]); }
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to load invoices."));
+      setInvoices([]);
+    }
   };
 
   // ── derived ───────────────────────────────────────────────
@@ -82,13 +89,15 @@ export default function PaymentApproval() {
 
   const handleConfirm = async () => {
     try {
-      if (action === "Approve")   await paymentApprovalApprove(selected.id, formData);
-      if (action === "Reject")    await paymentApprovalReject(selected.id, formData);
-      if (action === "Hold")      await paymentApprovalHold(selected.id, formData);
-      if (action === "Send Back") await paymentApprovalSendBack(selected.id);
+      let res;
+      if (action === "Approve")   res = await paymentApprovalApprove(selected.id, formData);
+      if (action === "Reject")    res = await paymentApprovalReject(selected.id, formData);
+      if (action === "Hold")      res = await paymentApprovalHold(selected.id, formData);
+      if (action === "Send Back") res = await paymentApprovalSendBack(selected.id);
       await loadInvoices();
       setSelected(null); setAction(null);
-    } catch (err) { alert(err); }
+      toast.success(getSuccessMessage(res, `Payment ${action.toLowerCase()} successful.`));
+    } catch (err) { toast.error(getErrorMessage(err, "Action failed. Please try again.")); }
   };
 
   const getAgeClass = (days) =>
@@ -155,6 +164,7 @@ export default function PaymentApproval() {
           <table>
             <thead>
               <tr>
+                <th>Doc</th>
                 <th>Invoice ID</th><th>Vendor</th><th>Department</th>
                 <th>Amount (₹)</th><th style={{ color: "var(--accent)" }}>📅 Date of Receipt</th>
                 <th>Due Date</th><th>Days</th><th>GL Code</th>
@@ -172,6 +182,10 @@ export default function PaymentApproval() {
                   const overdue = isOverdue(inv.dueDate);
                   return (
                     <tr key={inv.id} style={overdue ? { background: "#fff5f5" } : {}}>
+                      <td>
+                          <DownloadDocsButton invoice={inv} />
+
+                      </td>
                       <td>{overdue && <span style={{ color: "var(--danger)", marginRight: 4 }}>🚨</span>}{inv.id}</td>
                       <td style={{ fontWeight: 600 }}>{inv.vendor}</td>
                       <td>{inv.department}</td>
@@ -217,6 +231,7 @@ export default function PaymentApproval() {
             <table>
               <thead>
                 <tr>
+                  <th>Doc</th>
                   <th>Invoice ID</th><th>Vendor</th><th>Amount (₹)</th>
                   <th>Due Date</th><th>Payment Mode</th><th>Priority</th>
                   <th>Payment Status</th><th>Actions</th>
@@ -225,6 +240,9 @@ export default function PaymentApproval() {
               <tbody>
                 {approvedPagination.paginate(filteredApproved).map((inv) => (
                   <tr key={inv.id}>
+                    <td>
+                      <DownloadDocsButton invoice={inv} />
+                    </td>
                     <td>{inv.id}</td>
                     <td style={{ fontWeight: 600 }}>{inv.vendor}</td>
                     <td className="amount-cell">₹{inv.amount?.toLocaleString("en-IN")}</td>
@@ -241,7 +259,9 @@ export default function PaymentApproval() {
                       </span>
                     </td>
                     <td>
-                      <button className="btn btn-outline btn-sm" onClick={() => openAction(inv, "Send Back")}>↩ Send Back</button>
+                      <div className="action-row">
+                        <button className="btn btn-outline btn-sm" onClick={() => openAction(inv, "Send Back")}>↩ Send Back</button>
+                      </div>
                     </td>
                   </tr>
                 ))}

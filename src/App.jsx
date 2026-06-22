@@ -8,7 +8,7 @@ import PaymentApproval from "./pages/PaymentApproval";
 import PaymentProcessing from "./pages/PaymentProcessing";
 import KPIDashboard from "./pages/KPIDashboard";
 import UserAccessForm from "./pages/UserAccessForm";
-import UserList from "./pages/UserList";
+import Vendor from "./pages/Vendor";
 import UserManagement from "./pages/UserManagement";
 import ActivityLogs from "./pages/ActivityLogs";
 import UserWiseData from "./pages/UserWiseData";
@@ -19,17 +19,77 @@ import "../src/styles/Components.css";
 import { useCRUD, PAGE } from "./hook/useCRUD";
 
 const ALL_PAGES = [
-  { id: "dashboard",          label: "KPI Dashboard",       icon: "📊", short: "Dashboard",  path: "/kpi-dashboard",         },
-  { id: "invoice",            label: "Invoice Submission",  icon: "📤", short: "Invoice",    path: "/invoice",               },
-  { id: "finance",            label: "Finance Review",      icon: "🔍", short: "Finance",    path: "/finance",               },
-  { id: "hod",                label: "HOD Approval",        icon: "👨‍💼", short: "HOD",        path: "/hod",                  },
-  { id: "payment-approval",   label: "Payment Approval",    icon: "✅", short: "Approve",    path: "/payment-approval",      },
-  { id: "payment-processing", label: "Payment Processing",  icon: "💳", short: "Process",    path: "/payment-processing",    },
-  { id: "user-access",        label: "User Access",         icon: "🔐", short: "Access",     path: "/user-access",          },
-  { id: "user-list",          label: "User Access List",    icon: "👥", short: "User List",  path: "/user-list",            },
-  { id: "user-management",    label: "User Management",     icon: "👤", short: "Users",      path: "/user-management",      },
-  { id: "activity-logs",      label: "Activity Logs",       icon: "📋", short: "Logs",       path: "/activity-logs",        },
-  { id: "user-wise-data",     label: "User-Wise Data",      icon: "📊", short: "By User",    path: "/user-wise-data",       },
+  {
+    id: "dashboard",
+    label: "KPI Dashboard",
+    icon: "📊",
+    short: "Dashboard",
+    path: "/kpi-dashboard",
+  },
+  {
+    id: "invoice",
+    label: "Invoice Submission",
+    icon: "📤",
+    short: "Invoice",
+    path: "/invoice",
+  },
+  {
+    id: "finance",
+    label: "Finance Review",
+    icon: "🔍",
+    short: "Finance",
+    path: "/finance",
+  },
+  { id: "hod", label: "HOD Approval", icon: "👨‍💼", short: "HOD", path: "/hod" },
+  {
+    id: "payment-approval",
+    label: "Payment Approval",
+    icon: "✅",
+    short: "Approve",
+    path: "/payment-approval",
+  },
+  {
+    id: "payment-processing",
+    label: "Payment Processing",
+    icon: "💳",
+    short: "Process",
+    path: "/payment-processing",
+  },
+  {
+    id: "user-access",
+    label: "User Access",
+    icon: "🔐",
+    short: "Access",
+    path: "/user-access",
+  },
+  {
+    id: "vendor",
+    label: "Vendor",
+    icon: "👥",
+    short: "Vendor",
+    path: "/vendor",
+  },
+  {
+    id: "user-management",
+    label: "User Management",
+    icon: "👤",
+    short: "Users",
+    path: "/user-management",
+  },
+  {
+    id: "activity-logs",
+    label: "Activity Logs",
+    icon: "📋",
+    short: "Logs",
+    path: "/activity-logs",
+  },
+  {
+    id: "user-wise-data",
+    label: "User-Wise Data",
+    icon: "📊",
+    short: "By User",
+    path: "/user-wise-data",
+  },
 ];
 
 const PATH_TO_ID = Object.fromEntries(ALL_PAGES.map((p) => [p.path, p.id]));
@@ -60,12 +120,12 @@ export default function App() {
 
   // Filter pages based on user role
   const userRole = user?.role || "employee";
-  const isAdmin  = ["admin","super_admin"].includes(userRole);
+  const isAdmin = ["admin", "super_admin"].includes(userRole);
 
   // Filter sidebar pages by:
   // 1. role-based visibility (admin/super_admin see all admin pages)
   // 2. for non-admin roles: also check pageAccess from user permissions
-  const PAGES = ALL_PAGES.filter(p => {
+  const PAGES = ALL_PAGES.filter((p) => {
     // const roleOk = p.roles.includes("all") || p.roles.includes(userRole);
     // if (!roleOk) return false;
     // Admin/super_admin always see all pages they have role access to
@@ -73,11 +133,11 @@ export default function App() {
     // For other roles: also check pageAccess permission if it's a non-"all" page
     // Map sidebar page id to permission page name
     const pageNameMap = {
-      "dashboard":          "KPI Dashboard",
-      "invoice":            "Invoice Submission",
-      "finance":            "Finance Review",
-      "hod":                "HOD Approval",
-      "payment-approval":   "Payment Approval",
+      dashboard: "KPI Dashboard",
+      invoice: "Invoice Submission",
+      finance: "Finance Review",
+      hod: "HOD Approval",
+      "payment-approval": "Payment Approval",
       "payment-processing": "Payment Processing",
     };
     const permPage = pageNameMap[p.id];
@@ -85,8 +145,8 @@ export default function App() {
     return canPage(permPage);
   });
 
-  const activePage    = PATH_TO_ID[location.pathname] ?? "dashboard";
-  const currentPage   = ALL_PAGES.find((p) => p.id === activePage);
+  const activePage = PATH_TO_ID[location.pathname] ?? "dashboard";
+  const currentPage = ALL_PAGES.find((p) => p.id === activePage);
 
   const handlePageChange = (id) => {
     navigate(ID_TO_PATH[id] ?? "/");
@@ -94,26 +154,43 @@ export default function App() {
   };
 
   const isDesktop = screenSize === "desktop";
-  const isMobile  = screenSize === "mobile";
+  const isMobile = screenSize === "mobile";
 
   // Department-based invoice filter helper — passed down via context or prop drilling
   // Non-admin users should only see invoices from their own department
-  const userDepartment = (!isAdmin && user?.department) ? user.department : null;
+  const userDepartment = !isAdmin && user?.department ? user.department : null;
 
   const renderPage = () => {
     switch (activePage) {
-      case "dashboard":          return <KPIDashboard />;
-      case "invoice":            return <InvoiceSubmission userDepartment={userDepartment} isAdmin={isAdmin} />;
-      case "finance":            return <FinanceReview />;
-      case "hod":                return <HODApproval />;
-      case "payment-approval":   return <PaymentApproval />;
-      case "payment-processing": return <PaymentProcessing />;
-      case "user-access":        return <UserAccessForm />;
-      case "user-list":          return <UserList />;
-      case "user-management":    return <UserManagement />;
-      case "activity-logs":      return <ActivityLogs />;
-      case "user-wise-data":     return <UserWiseData />;
-      default:                   return <KPIDashboard />;
+      case "dashboard":
+        return <KPIDashboard />;
+      case "invoice":
+        return (
+          <InvoiceSubmission
+            userDepartment={userDepartment}
+            isAdmin={isAdmin}
+          />
+        );
+      case "finance":
+        return <FinanceReview />;
+      case "hod":
+        return <HODApproval />;
+      case "payment-approval":
+        return <PaymentApproval />;
+      case "payment-processing":
+        return <PaymentProcessing />;
+      case "user-access":
+        return <UserAccessForm />;
+      case "vendor":
+        return <Vendor />;
+      case "user-management":
+        return <UserManagement />;
+      case "activity-logs":
+        return <ActivityLogs />;
+      case "user-wise-data":
+        return <UserWiseData />;
+      default:
+        return <KPIDashboard />;
     }
   };
 
@@ -121,7 +198,11 @@ export default function App() {
     <InvoiceProvider>
       <div className="app-shell">
         {isDesktop && (
-          <Sidebar pages={PAGES} activePage={activePage} setActivePage={handlePageChange} />
+          <Sidebar
+            pages={PAGES}
+            activePage={activePage}
+            setActivePage={handlePageChange}
+          />
         )}
 
         {!isDesktop && (
@@ -130,19 +211,36 @@ export default function App() {
               className={`drawer-overlay ${drawerOpen ? "drawer-overlay-visible" : ""}`}
               onClick={() => setDrawerOpen(false)}
             />
-            <div className={`drawer-sidebar ${drawerOpen ? "drawer-open" : ""}`}>
+            <div
+              className={`drawer-sidebar ${drawerOpen ? "drawer-open" : ""}`}
+            >
               <div className="drawer-close-row">
-                <button className="drawer-close-btn" onClick={() => setDrawerOpen(false)}>✕</button>
+                <button
+                  className="drawer-close-btn"
+                  onClick={() => setDrawerOpen(false)}
+                >
+                  ✕
+                </button>
               </div>
-              <Sidebar pages={PAGES} activePage={activePage} setActivePage={handlePageChange} />
+              <Sidebar
+                pages={PAGES}
+                activePage={activePage}
+                setActivePage={handlePageChange}
+              />
             </div>
           </>
         )}
 
-        <main className={`main-content ${isDesktop ? "with-sidebar" : "no-sidebar"}`}>
+        <main
+          className={`main-content ${isDesktop ? "with-sidebar" : "no-sidebar"}`}
+        >
           {!isDesktop && (
             <div className="topbar">
-              <button className="topbar-hamburger" onClick={() => setDrawerOpen((o) => !o)} aria-label="Open menu">
+              <button
+                className="topbar-hamburger"
+                onClick={() => setDrawerOpen((o) => !o)}
+                aria-label="Open menu"
+              >
                 <span className="ham-line" />
                 <span className="ham-line" />
                 <span className="ham-line" />
@@ -154,13 +252,15 @@ export default function App() {
             </div>
           )}
 
-          <div className={`page-wrapper ${isMobile ? "page-wrapper-mobile" : ""}`}>
+          <div
+            className={`page-wrapper ${isMobile ? "page-wrapper-mobile" : ""}`}
+          >
             {renderPage()}
           </div>
 
           {isMobile && (
             <nav className="bottom-nav">
-              {PAGES.slice(0,6).map((page) => (
+              {PAGES.slice(0, 6).map((page) => (
                 <button
                   key={page.id}
                   className={`bottom-nav-item ${activePage === page.id ? "active" : ""}`}

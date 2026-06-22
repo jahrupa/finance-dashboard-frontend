@@ -55,6 +55,9 @@ export const PROCESSING_SECTION_INVOICES = `${V1}/invoices/section/payment-proce
 // ── Vendors ────────────────────────────────────────────────
 export const VENDORS = `${V1}/vendors`;
 export const VENDOR_BY_ID = (id) => `${V1}/vendors/${id}`;
+export const CREATE_VENDOR = `${V1}/vendors`;
+export const UPDATE_VENDOR = (id) => `${V1}/vendors/${id}`;
+export const DELETE_VENDOR = (id) => `${V1}/vendors/${id}`;
 
 // ── Users ──────────────────────────────────────────────────
 export const USERS = `${V1}/users`;
@@ -70,7 +73,6 @@ export const CHANGE_PASSWORD = `${V1}/users/me/password`;
 // export const CHANGE_PASSWORD = `${V1}/users/me/password`;
 
 // ── User Access Control ──────────────────────────────────────────────────
-// ── User Access Control ───────────────────────────────────────────────
 
 export const USER_ACCESS = `${V1}/user-access/`;
 export const USER_ACCESS_BY_ID = (id) => `${V1}/user-access/${id}`;
