@@ -7,7 +7,6 @@ import HODApproval from "./pages/HODApproval";
 import PaymentApproval from "./pages/PaymentApproval";
 import PaymentProcessing from "./pages/PaymentProcessing";
 import KPIDashboard from "./pages/KPIDashboard";
-import UserAccessForm from "./pages/UserAccessForm";
 import Vendor from "./pages/Vendor";
 import UserManagement from "./pages/UserManagement";
 import ActivityLogs from "./pages/ActivityLogs";
@@ -54,13 +53,6 @@ const ALL_PAGES = [
     icon: "💳",
     short: "Process",
     path: "/payment-processing",
-  },
-  {
-    id: "user-access",
-    label: "User Access",
-    icon: "🔐",
-    short: "Access",
-    path: "/user-access",
   },
   {
     id: "vendor",
@@ -179,8 +171,6 @@ export default function App() {
         return <PaymentApproval />;
       case "payment-processing":
         return <PaymentProcessing />;
-      case "user-access":
-        return <UserAccessForm />;
       case "vendor":
         return <Vendor />;
       case "user-management":
