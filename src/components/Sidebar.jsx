@@ -1,6 +1,30 @@
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import "./Sidebar.css";
+import { useCRUD } from "../hook/useCRUD";
 
 export default function Sidebar({ pages, activePage, setActivePage }) {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/", { replace: true });
+  };
+
+  const initials = user?.name
+    ? user.name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()
+    : "AP";
+
+  const displayName = user?.name ?? "Guest User";
+  const displayRole = user?.role
+    ? user.role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    : "Finance Manager";
+ const { canPage } = useCRUD();
+
+  const visiblePages = pages.filter((page) =>
+    canPage(page.label)
+  );
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -13,7 +37,7 @@ export default function Sidebar({ pages, activePage, setActivePage }) {
 
       <nav className="sidebar-nav">
         <span className="nav-section-label">Navigation</span>
-        {pages.map((page) => (
+        {visiblePages.map((page) => (
           <button
             key={page.id}
             className={`nav-item ${activePage === page.id ? "active" : ""}`}
@@ -28,12 +52,24 @@ export default function Sidebar({ pages, activePage, setActivePage }) {
 
       <div className="sidebar-footer">
         <div className="user-badge">
-          <div className="user-avatar">SK</div>
+          <div className="user-avatar">{initials}</div>
           <div className="user-info">
-            <span className="user-name">Samir Kapoor</span>
-            <span className="user-role">Finance Manager</span>
+            <span className="user-name">{displayName}</span>
+            <span className="user-role">{displayRole}</span>
           </div>
         </div>
+        <button
+          className="logout-btn"
+          onClick={handleLogout}
+          title="Sign out"
+          aria-label="Sign out"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+        </button>
       </div>
     </aside>
   );

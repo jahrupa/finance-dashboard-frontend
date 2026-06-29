@@ -1,0 +1,254 @@
+
+/* ── Page root ───────────────────────────────────────────── */
+.vd-root {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ── Page header row (title left, button right) ──────────── */
+.vd-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+/* ── Avatar circle ───────────────────────────────────────── */
+.vd-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.vd-avatar-lg {
+  width: 52px;
+  height: 52px;
+  font-size: 20px;
+}
+
+/* ── Status badge ────────────────────────────────────────── */
+.vd-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.vd-status.active {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.vd-status.inactive {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.vd-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+/* ── Form grid (2-col, collapses to 1-col on mobile) ─────── */
+.vd-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.vd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.vd-field-full {
+  grid-column: 1 / -1;
+}
+
+.vd-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.vd-req {
+  color: var(--danger);
+  margin-left: 2px;
+}
+
+/* Error state on form-control — additive class */
+.vd-input-error {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.10) !important;
+}
+
+.vd-field-error {
+  font-size: 12px;
+  color: var(--danger);
+  font-weight: 500;
+}
+
+/* ── Alert banners ───────────────────────────────────────── */
+.vd-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--danger-soft);
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  font-size: 13.5px;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.vd-success-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--success-soft);
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius-sm);
+  color: var(--success);
+  font-size: 13.5px;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+/* ── Loading state ───────────────────────────────────────── */
+.vd-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  gap: 14px;
+}
+
+.vd-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: vd-spin 0.8s linear infinite;
+}
+
+.vd-loading-text {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+@keyframes vd-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Empty state ─────────────────────────────────────────── */
+.vd-empty {
+  text-align: center;
+  padding: 60px 24px;
+}
+
+.vd-empty-icon {
+  font-size: 48px;
+  margin-bottom: 14px;
+}
+
+.vd-empty-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.vd-empty-sub {
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+/* ── Detail modal — hero row ─────────────────────────────── */
+.vd-detail-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.vd-detail-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.vd-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 4px 0 16px;
+}
+
+.vd-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.vd-detail-item {}
+
+.vd-detail-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 4px;
+}
+
+.vd-detail-value {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.vd-detail-value.muted {
+  color: var(--text-muted);
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .vd-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .vd-field-full {
+    grid-column: 1;
+  }
+  .vd-detail-grid {
+    grid-template-columns: 1fr;
+  }
+  .vd-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

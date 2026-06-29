@@ -1,5 +1,7 @@
 import API from "./axios";
 import {
+  AUTH_LOGIN,
+  // AUTH_REGISTER,
   DASHBOARD_KPIS,
   FINANCE_ACCEPT,
   FINANCE_HOLD,
@@ -30,7 +32,19 @@ import {
   USER_ME,
   CHANGE_PASSWORD,
   FINANCE_PENDING,
-  PA_SEND_BACK
+  PA_SEND_BACK,
+  DOWNLOAD_DOCUMENT,
+  USER_ACCESS,
+  USER_ACCESS_BY_ID,
+  UPDATE_USER_ACCESS,
+  DELETE_USER_ACCESS,
+  CREATE_USER_ACCESS,
+  DOWNLOAD_ZIP_DOCUMENT,
+  UPDATE_FINANCE,
+  CREATE_USER,
+  CREATE_VENDOR,
+  UPDATE_VENDOR,
+  DELETE_VENDOR
 } from "./endpoints";
 
 export const fetchDashboardKpis = async () => {
@@ -61,7 +75,19 @@ export const fetchInvoices = async ({
     throw error.response?.data?.error || "Failed to fetch invoices";
   }
 };
+// DOWNLOAD SERVICE
+export const downloadFile = async (invoiceId, fileName) => {
+  const response = await API.get(DOWNLOAD_DOCUMENT(invoiceId, fileName), {
+    responseType: "blob",
+  });
 
+  return response;
+};
+
+export const downloadZipFile = (invoiceId) =>
+  API.get(DOWNLOAD_ZIP_DOCUMENT(invoiceId), {
+    responseType: "blob",
+  });
 // ── Fetch single invoice ──────────────────────────────────────
 export const fetchInvoiceById = async (id) => {
   try {
@@ -73,22 +99,24 @@ export const fetchInvoiceById = async (id) => {
 };
 
 // ── Submit new invoice ────────────────────────────────────────
-export const createInvoice = async (payload) => {
-  try {
-    const response = await API.post(INVOICES, payload);
-    return response.data;
-  } catch (error) {
-    throw error.response?.data?.error || "Failed to submit invoice";
-  }
+export const createInvoice = async (formData) => {
+  const response = await API.post(INVOICES, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  return response.data;
 };
-export const updateInvoice = async (id, payload) => {
-  try {
-    const response = await API.put(UPDATE_INVOICE(id), payload);
-    return response.data;
-  } catch (error) {
-    throw error.response?.data?.error || "Failed to update invoice";
-  }
-}
+
+export const updateInvoice = async (id, formData) => {
+  const response = await API.put(UPDATE_INVOICE(id), formData
+    , {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  return response.data;
+};
 export const deleteInvoice = async (id) => {
   try {
     const res = await API.delete(DELETE_INVOICE(id));
@@ -131,6 +159,15 @@ export const financePending = async (id, payload) => {
     return response.data;
   } catch (error) {
     throw error.response?.data?.error || "Finance pending failed";
+  }
+}
+
+export const updateFinance = async (id, payload) => {
+  try {
+    const response = await API.patch(UPDATE_FINANCE(id), payload);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data?.error || "Finance update failed";
   }
 }
 // ── HOD actions ───────────────────────────────────────────────
@@ -261,31 +298,65 @@ export const fetchProcessingInvoices = async () => {
   const res = await API.get(PROCESSING_SECTION_INVOICES);
   return res.data;
 };
-export const fetchVendors = async () => {
-  const res = await API.get(VENDORS);
-  return res.data;
+// ─── Vendors ─────────────────────────────────────────────────
+// Normalize backend errors — handles JSON ({error|message}) and fiber's plain-text responses
+const vendorError = (error, fallback) => {
+  const data = error.response?.data;
+  if (typeof data === "string" && data.trim()) return data;
+  return data?.error || data?.message || fallback;
 };
 
+export const fetchVendors = async () => {
+  try {
+    const res = await API.get(VENDORS);
+    return res.data;
+  } catch (error) {
+    throw vendorError(error, "Failed to fetch vendors");
+  }
+};
+export const fetchVendorById = async (id) => {
+  try {
+    const res = await API.get(VENDOR_BY_ID(id));
+    return res.data;
+  } catch (error) {
+    throw vendorError(error, "Failed to fetch vendor");
+  }
+};
 export const createVendor = async (payload) => {
-  const res = await API.post(VENDORS, payload);
-  return res.data;
+  try {
+    const res = await API.post(CREATE_VENDOR, payload);
+    return res.data;
+  } catch (error) {
+    throw vendorError(error, "Failed to create vendor");
+  }
 };
 
 export const updateVendor = async (id, payload) => {
-  const res = await API.put(VENDOR_BY_ID(id), payload);
-  return res.data;
+  try {
+    const res = await API.put(UPDATE_VENDOR(id), payload);
+    return res.data;
+  } catch (error) {
+    throw vendorError(error, "Failed to update vendor");
+  }
 };
 
 export const deleteVendor = async (id) => {
-  const res = await API.delete(VENDOR_BY_ID(id));
-  return res.data;
+  try {
+    const res = await API.delete(DELETE_VENDOR(id));
+    return res.data;
+  } catch (error) {
+    throw vendorError(error, "Failed to delete vendor");
+  }
 };
-
+// ── Users ─────────────────────────────────────────────────
 export const fetchUsers = async () => {
   const res = await API.get(USERS);
   return res.data;
 };
-
+export const createUser = async (payload) => {
+  const res = await API.post(CREATE_USER, payload);
+  return res.data;
+};
 export const fetchUserById = async (id) => {
   const res = await API.get(USER_BY_ID(id));
   return res.data;
@@ -309,4 +380,60 @@ export const deleteUser = async (id) => {
 export const changePassword = async (payload) => {
   const res = await API.put(CHANGE_PASSWORD, payload);
   return res.data;
+};
+// ── Auth ──────────────────────────────────────────────────────────
+export const loginUser = async (credentials) => {
+  try {
+    const res = await API.post(AUTH_LOGIN, credentials);
+    return res.data;
+  } catch (error) {
+    throw error.response?.data?.message || "Login failed";
+  }
+};
+
+// export const registerUser = async (payload) => {
+//   try {
+//     const res = await API.post(AUTH_REGISTER, payload);
+//     return res.data;
+//   } catch (error) {
+//     throw error.response?.data?.message || "Registration failed";
+//   }
+// };
+
+// ─── User Access ───────────────────────────────────────────────
+export const getAllUserAccess = async () => {
+  const res = await API.get(USER_ACCESS);
+  return res.data;
+};
+
+export const getUserAccessById = async (id) => {
+  const res = await API.get(USER_ACCESS_BY_ID(id));
+  return res.data;
+};
+
+export const createUserAccess = async (payload) => {
+  try {
+    const res = await API.post(CREATE_USER_ACCESS, payload);
+    return res.data;
+  } catch (error) {
+    throw error.response?.data?.error || "Creating user access failed";
+  }
+};
+
+export const updateUserAccess = async (id, payload) => {
+  try {
+    const res = await API.put(UPDATE_USER_ACCESS(id), payload);
+    return res.data;
+  } catch (error) {
+    throw error.response?.data?.error || "Updating user access failed";
+  }
+};
+
+export const deleteUserAccess = async (id) => {
+  try {
+    const res = await API.delete(DELETE_USER_ACCESS(id));
+    return res.data;
+  } catch (error) {
+    throw error.response?.data?.error || "Deleting user access failed";
+  }
 };

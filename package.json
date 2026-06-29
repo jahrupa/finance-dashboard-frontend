@@ -4,16 +4,19 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --port 5173",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev-mode": "vite --mode dev"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
     "axios": "^1.16.0",
+    "crypto-js": "^4.2.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "react-router-dom": "^7.15.0",
     "recharts": "^3.8.1",
     "uuid": "^14.0.0"
   },

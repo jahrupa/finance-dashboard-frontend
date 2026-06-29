@@ -1,7 +1,23 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useInvoices } from "../context/InvoiceContext";
-import { createInvoice, deleteInvoice, fetchInvoiceById, fetchInvoices, updateInvoice } from "../api/Service";
-import { useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
+import { getErrorMessage, getSuccessMessage } from "../utils/apiMessage";
+import {
+  createInvoice,
+  deleteInvoice,
+  downloadFile,
+  downloadZipFile,
+  fetchInvoiceById,
+  fetchInvoices,
+  updateInvoice,
+} from "../api/Service";
+import SearchBar from "../components/ui/SearchBar";
+import FilterSelect from "../components/ui/FilterSelect";
+import Pagination from "../components/ui/Pagination";
+import usePagination from "../components/ui/usePagination";
+
+// Base URL for document downloads — strip trailing slash
 
 const STATUS_COLORS = {
   "Pending Review": "badge-blue",
@@ -10,102 +26,330 @@ const STATUS_COLORS = {
   "Payment Approval": "badge-yellow",
   "Ready for Payment": "badge-green",
   "On Hold": "badge-yellow",
-  "Rejected": "badge-red",
-  "Paid": "badge-green",
+  Rejected: "badge-red",
+  Paid: "badge-green",
 };
 
 const EMPTY_FORM = {
-  vendor: "", invoiceNo: "", invoiceDate: "", amount: "",
-  department: "", uploadedBy: "", dueDate: "", taxDetails: "", remarks: ""
+  vendor: "",
+  vendorEmail: "",
+  invoiceNo: "",
+  invoiceDate: "",
+  amount: "",
+  department: "",
+  uploadedBy: "",
+  dueDate: "",
+  taxDetails: "",
+  remarks: "",
+};
+const TAX_TYPE_OPTIONS = [
+  { value: "GST Invoice", label: "GST Invoice" },
+  { value: "Non GST Invoice", label: "Non GST Invoice" },
+  { value: "Proforma Invoice", label: "Proforma Invoice" },
+  { value: "Advance Voucher", label: "Advance Voucher" },
+];
+// ── Filename helpers (module-level) ──────────────────────────
+// Extract just the filename from a stored path (no subdirs expected, but safe)
+const getFileName = (docPath) => {
+  if (!docPath) return "";
+  return docPath.split("/").pop(); // handles "folder/file.pdf" or "file.pdf"
 };
 
-export default function InvoiceSubmission() {
-  const { addInvoice, getDaysPending, getAgingBucket, DEPARTMENTS, VENDORS } = useInvoices();
+// "1779183565_file-sample_150kB.pdf"  →  "file-sample_150kB.pdf"
+const friendlyName = (docPath) => {
+  const fileName = getFileName(docPath);
+  if (!fileName) return "";
+  // filename format: <timestamp/id>_<original_name>
+  const underscore = fileName.indexOf("_");
+  return underscore !== -1 ? fileName.slice(underscore + 1) : fileName;
+};
+
+export default function InvoiceSubmission({
+  userDepartment = null,
+  isAdmin = true,
+}) {
+  const { getDaysPending, DEPARTMENTS, VENDORS, vendors } = useInvoices();
+  // Issue 3 fix: get logged-in user to auto-fill uploadedBy and department
+  console.log(vendors, "vendors");
+  const { user } = useAuth();
+  const toast = useToast();
+
   const [form, setForm] = useState(EMPTY_FORM);
-  console.log(form,'form')
   const [showForm, setShowForm] = useState(false);
-  const [filter, setFilter] = useState({ dept: "", status: "", search: "" });
+
+  // Issue 3 fix: auto-populate uploadedBy and department whenever user changes or form opens
+  useEffect(() => {
+    if (user) {
+      setForm((prev) => ({
+        ...prev,
+        uploadedBy: user.name || prev.uploadedBy,
+        // Non-admins are locked to their own department
+        department:
+          !isAdmin && user.department ? user.department : prev.department,
+      }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, showForm]);
+
+  // If a non-admin user has a department, lock the dept filter to their department
+  const [filter, setFilter] = useState({
+    dept: userDepartment || "",
+    status: "",
+    search: "",
+    fromDate: "",
+    toDate: "",
+  });
+  const { page, pageSize, setPage, setPageSize, resetPage, paginate } =
+    usePagination(10);
   const [submitted, setSubmitted] = useState(false);
   const [invoices, setInvoices] = useState([]);
-  const [action, setAction] = useState({
-    edit: false,
-    delete: false
-  })
-  console.log(invoices, 'invoices')
-  const handleChange = e => setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  const [action, setAction] = useState({ edit: false, id: null });
 
+  // Files the user picks to upload (NEW files)
+  const [newFiles, setNewFiles] = useState([]);
+  // Existing docs already saved on the server (for edit mode)
+  // Array of doc path strings
+  const [existingDocs, setExistingDocs] = useState([]);
+  // Docs the user wants to remove (subset of existingDocs)
+  const [docsToRemove, setDocsToRemove] = useState([]);
+  // ─── Load invoices ───────────────────────────────────────────
+  const loadInvoices = async (f = filter) => {
+    try {
+      const params = {};
+      // Non-admin users are always scoped to their department
+      const dept = !isAdmin && userDepartment ? userDepartment : f.dept;
+      if (dept) params.department = dept;
+      if (f.status) params.status = f.status;
+      if (f.search) params.search = f.search;
+      if (f.fromDate) params.fromDate = f.fromDate;
+      if (f.toDate) params.toDate = f.toDate;
+      const res = await fetchInvoices(params);
+      setInvoices(res?.data || []);
+    } catch (err) {
+      console.error("Error fetching invoices:", err);
+      toast.error(getErrorMessage(err, "Failed to load invoices."));
+      setInvoices([]);
+    }
+  };
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchData = async () => {
+      try {
+        const res = await fetchInvoices();
+        if (isMounted) {
+          setInvoices(res?.data || []);
+        }
+      } catch (err) {
+        console.error("Fetch error:", err);
+        if (isMounted) {
+          toast.error(getErrorMessage(err, "Failed to load invoices."));
+          setInvoices([]);
+        }
+      }
+    };
+
+    fetchData();
+
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ─── Form input change ───────────────────────────────────────
+  const handleChange = (e) =>
+    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+
+  // ─── Open Edit modal ─────────────────────────────────────────
+  const handleEdit = async (id) => {
+    try {
+      const res = await fetchInvoiceById(id);
+      const data = res?.data;
+      if (!data) return;
+      const selectedVendor = vendors.find((v) => v.name === data.vendor);
+      setForm({
+        vendor: data.vendor || "",
+        vendorEmail: data.vendorEmail || selectedVendor?.email || "",
+        invoiceNo: data.invoiceNo || "",
+        invoiceDate: data.invoiceDate?.split("T")[0] || "",
+        amount: data.amount || "",
+        department: data.department || "",
+        uploadedBy: data.uploadedBy || "",
+        dueDate: data.dueDate?.split("T")[0] || "",
+        taxDetails: data.taxDetails || "",
+        remarks: data.remarks || "",
+      });
+
+      // Normalise: documents may be array or single string
+      const docs = Array.isArray(data.documents)
+        ? data.documents
+        : data.documentUrl
+          ? [data.documentUrl]
+          : [];
+
+      setExistingDocs(docs);
+      setDocsToRemove([]);
+      setNewFiles([]);
+      setAction({ edit: true, id });
+      setShowForm(true);
+    } catch (err) {
+      console.error("Edit fetch error:", err);
+      toast.error(getErrorMessage(err, "Failed to load invoice details."));
+    }
+  };
+
+  // ─── Toggle removal of an existing doc ──────────────────────
+  const toggleRemoveDoc = (docPath) => {
+    setDocsToRemove((prev) =>
+      prev.includes(docPath)
+        ? prev.filter((d) => d !== docPath)
+        : [...prev, docPath],
+    );
+  };
+
+  // ─── Remove a newly picked file ─────────────────────────────
+  const removeNewFile = (index) =>
+    setNewFiles((prev) => prev.filter((_, i) => i !== index));
+
+  // ─── Submit / Update ─────────────────────────────────────────
   const handleSubmit = async () => {
     if (
       !form.vendor ||
+      // !form.vendorEmail ||
       !form.invoiceNo ||
       !form.invoiceDate ||
       !form.amount ||
       !form.department ||
       !form.uploadedBy
     ) {
-      alert("Please fill all required fields.");
+      toast.error("Please fill all required fields.");
+      return;
+    }
+    try {
+      const formData = new FormData();
+      Object.entries(form).forEach(([k, v]) => formData.append(k, v));
+      newFiles.forEach((file) => formData.append("documents", file));
+
+      // Tell the server which existing docs to keep / remove
+      let res;
+      if (action.edit) {
+        const keepDocs = existingDocs.filter((d) => !docsToRemove.includes(d));
+        keepDocs.forEach((d) => formData.append("keepDocuments", d));
+        docsToRemove.forEach((d) => formData.append("removeDocuments", d));
+        res = await updateInvoice(action.id, formData);
+      } else {
+        res = await createInvoice(formData);
+      }
+
+      await loadInvoices();
+      closeModal();
+      toast.success(
+        getSuccessMessage(
+          res,
+          action.edit ? "Invoice updated successfully." : "Invoice submitted successfully.",
+        ),
+      );
+      setSubmitted(true);
+      setTimeout(() => setSubmitted(false), 3000);
+    } catch (err) {
+      console.error("Submit error:", err);
+      toast.error(getErrorMessage(err, "Failed to save invoice. Please try again."));
+    }
+  };
+
+  // ─── Delete invoice ──────────────────────────────────────────
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this invoice?")) return;
+    try {
+      const res = await deleteInvoice(id);
+      await loadInvoices();
+      toast.success(getSuccessMessage(res, "Invoice deleted successfully."));
+    } catch (err) {
+      console.error(err);
+      toast.error(getErrorMessage(err, "Failed to delete invoice."));
+    }
+  };
+
+  // ─── Download documents — single file or zip (multiple) ─────
+  const handleDownloadDoc = async (invoiceId, docPath) => {
+    const fileName = getFileName(docPath);
+    if (!fileName) return;
+    try {
+      const response = await downloadFile(invoiceId, fileName);
+      const blob = new Blob([response.data], {
+        type: response.headers["content-type"] || "application/octet-stream",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = friendlyName(docPath) || fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Download error:", err);
+      toast.error(getErrorMessage(err, "Unable to download document. Please try again."));
+    }
+  };
+
+  // Download all docs for an invoice as a ZIP
+  const handleDownloadZip = async (invoiceId) => {
+    if (!invoiceId || typeof invoiceId !== "string") {
+      console.error("Invalid invoiceId:", invoiceId);
       return;
     }
 
-    const payload = {
-      invoiceNo: form.invoiceNo,
-      vendor: form.vendor,
-      invoiceDate: form.invoiceDate,
-      department: form.department,
-      uploadedBy: form.uploadedBy,
-      amount: Number(form.amount),
-      dueDate: form.dueDate,
-      taxDetails: form.taxDetails,
-      remarks: form.remarks
-    };
-
     try {
-      let response;
+      const response = await downloadZipFile(invoiceId);
 
-      if (action?.edit && action?.id) {
-        // ✅ UPDATE
-        response = await updateInvoice(action.id, payload);
+      const blob = new Blob([response.data], {
+        type: "application/zip",
+      });
 
-        // update local state properly
-        setInvoices(prev =>
-          prev.map(inv =>
-            inv._id === action.id ? response.data : inv
-          )
-        );
+      const url = window.URL.createObjectURL(blob);
 
-        setAction({ edit: false, delete: false });
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `invoice-documents.zip`;
 
-      } else {
-        // ✅ CREATE
-        response = await createInvoice(payload);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
 
-        // add new invoice to list
-        setInvoices(prev => [...prev, response.data]);
-      }
-
-      // reset form
-      setForm(EMPTY_FORM);
-      setShowForm(false);
-      setSubmitted(true);
-      setTimeout(() => setSubmitted(false), 3000);
-
-    } catch (error) {
-      console.error("Submission error:", error?.response?.data || error.message);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("ZIP download error:", err);
+      toast.error(getErrorMessage(err, "Unable to download ZIP file."));
     }
   };
-const handleDelete = async (id) => {
-  try {
-    await deleteInvoice(id);
-    setInvoices(prev => prev.filter(inv => inv._id !== id));
-  } catch (err) {
-    console.error(err);
-  }
-};
-  const filtered = invoices.filter(inv => {
+
+  // ─── Close modal ─────────────────────────────────────────────
+  const closeModal = () => {
+    setShowForm(false);
+    setForm(EMPTY_FORM);
+    setNewFiles([]);
+    setExistingDocs([]);
+    setDocsToRemove([]);
+    setAction({ edit: false, id: null });
+  };
+
+  // ─── Filters ─────────────────────────────────────────────────
+  const filtered = invoices.filter((inv) => {
     const matchDept = !filter.dept || inv.department === filter.dept;
     const matchStatus = !filter.status || inv.status === filter.status;
-    const matchSearch = !filter.search || inv.vendor.toLowerCase().includes(filter.search.toLowerCase()) || inv.invoiceNo.toLowerCase().includes(filter.search.toLowerCase()) || inv.id.toLowerCase().includes(filter.search.toLowerCase());
-    return matchDept && matchStatus && matchSearch;
+    const matchSearch =
+      !filter.search ||
+      inv.vendor?.toLowerCase().includes(filter.search.toLowerCase()) ||
+      inv.invoiceNo?.toLowerCase().includes(filter.search.toLowerCase()) ||
+      inv.id?.toLowerCase().includes(filter.search.toLowerCase());
+    // Date range: compare invoice_date string lexicographically (ISO format)
+    const invDate = inv.invoiceDate ? inv.invoiceDate.split("T")[0] : "";
+    const matchFrom =
+      !filter.fromDate || (invDate && invDate >= filter.fromDate);
+    const matchTo = !filter.toDate || (invDate && invDate <= filter.toDate);
+    return matchDept && matchStatus && matchSearch && matchFrom && matchTo;
   });
 
   const getAgeClass = (days) => {
@@ -115,79 +359,164 @@ const handleDelete = async (id) => {
     return "age-red";
   };
 
-  const allStatuses = [...new Set(invoices.map(i => i.status))];
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        if (action?.edit && action?.id) {
-          const response = await fetchInvoiceById(action.id);
-          const data = response?.data;
+  const allStatuses = [...new Set(invoices.map((i) => i.status))];
 
-          if (data) {
-            // API → Form field mapping
-            setForm({
-              vendor: data.vendor || "",
-              invoiceNo: data.invoiceNo || "",
-              invoiceDate: data.invoiceDate?.split("T")[0] || "",
-              amount: data.amount || "",
-              department: data.department || "",
-              uploadedBy: data.uploadedBy || "",
-              dueDate: data.dueDate?.split("T")[0] || "",
-              taxDetails: data.taxDetails || "",
-              remarks: data.remarks || ""
-            });
+  // ─── Helpers ─────────────────────────────────────────────────
+  // Get all docs for a row (for download icon tooltip / count)
+  const getRowDocs = (inv) =>
+    Array.isArray(inv.documents) && inv.documents.length
+      ? inv.documents
+      : inv.documentUrl
+        ? [inv.documentUrl]
+        : [];
 
-            setShowForm(true);
-          }
-        } else {
-          const response = await fetchInvoices();
-          setInvoices(response?.data || []);
-        }
-      } catch (error) {
-        console.error("Error fetching invoices:", error);
-        setInvoices([]);
-      }
-    };
-
-    fetchData();
-  }, [action?.edit, action?.id]);
+  // ─── Render ──────────────────────────────────────────────────
   return (
     <div>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      {/* HEADER */}
+      <div
+        className="page-header"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+        }}
+      >
         <div>
           <h1 className="page-title">Invoice Submission Tracker</h1>
-          <p className="page-subtitle">Upload and track all invoices across departments</p>
+          <p className="page-subtitle">
+            {userDepartment && !isAdmin
+              ? `Showing invoices for your department: ${userDepartment}`
+              : "Upload and track all invoices across departments"}
+          </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+        <button
+          className="btn btn-primary"
+          onClick={() => {
+            setForm(EMPTY_FORM);
+            setNewFiles([]);
+            setExistingDocs([]);
+            setDocsToRemove([]);
+            setAction({ edit: false, id: null });
+            setShowForm(true);
+          }}
+        >
           + Submit Invoice
         </button>
       </div>
 
+      {/* SUCCESS */}
       {submitted && (
         <div className="alert alert-info" style={{ marginBottom: 16 }}>
-          ✅ Invoice submitted successfully! Finance team has been notified.
+          ✅ Invoice {action?.edit ? "updated" : "submitted"} successfully!
         </div>
       )}
 
-      {/* Filters */}
+      {/* FILTERS */}
       <div className="filter-bar">
-        <input
-          className="form-control search-input"
+        <SearchBar
+          // className="form-control search-input"
           placeholder="🔍 Search vendor, invoice no, ID..."
           value={filter.search}
-          onChange={e => setFilter(p => ({ ...p, search: e.target.value }))}
+          onChange={(v) => {
+            setFilter((p) => ({ ...p, search: v }));
+            resetPage();
+          }}
+
+          // value={filter.search}
+          // onChange={(v) => { setFilter((p) => ({ ...p, search: v })); resetPage(); }}
+          // placeholder="Search vendor, invoice no, ID..."
+          // className="form-control search-input"
         />
-        <select className="form-control" value={filter.dept} onChange={e => setFilter(p => ({ ...p, dept: e.target.value }))}>
-          <option value="">All Departments</option>
-          {DEPARTMENTS.map(d => <option key={d}>{d}</option>)}
-        </select>
-        <select className="form-control" value={filter.status} onChange={e => setFilter(p => ({ ...p, status: e.target.value }))}>
-          <option value="">All Statuses</option>
-          {allStatuses.map(s => <option key={s}>{s}</option>)}
-        </select>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 4 }}>{filtered.length} records</span>
+        <FilterSelect
+          value={filter.dept}
+          onChange={(v) => {
+            if (!userDepartment || isAdmin) {
+              setFilter((p) => ({ ...p, dept: v }));
+              resetPage();
+            }
+          }}
+          options={DEPARTMENTS}
+          placeholder={
+            userDepartment && !isAdmin
+              ? `Dept: ${userDepartment}`
+              : "All Departments"
+          }
+          className="form-control"
+          disabled={!isAdmin && Boolean(userDepartment)}
+        />
+        <FilterSelect
+          value={filter.status}
+          onChange={(v) => {
+            setFilter((p) => ({ ...p, status: v }));
+            resetPage();
+          }}
+          options={allStatuses}
+          placeholder="All Statuses"
+        />
+        {/* ── Date range pickers ─────────────────────────────── */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span
+            style={{
+              fontSize: 12,
+              color: "var(--text-muted)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            From
+          </span>
+          <input
+            type="date"
+            className="form-control"
+            style={{ width: 145, fontSize: 13 }}
+            value={filter.fromDate}
+            max={filter.toDate || new Date().toISOString().split("T")[0]}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFilter((p) => ({ ...p, fromDate: v }));
+              resetPage();
+            }}
+          />
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>To</span>
+          <input
+            type="date"
+            className="form-control"
+            style={{ width: 145, fontSize: 13 }}
+            value={filter.toDate}
+            min={filter.fromDate || undefined}
+            max={new Date().toISOString().split("T")[0]}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFilter((p) => ({ ...p, toDate: v }));
+              resetPage();
+            }}
+          />
+          {(filter.fromDate || filter.toDate) && (
+            <button
+              className="btn btn-outline"
+              style={{ fontSize: 11, padding: "3px 8px", whiteSpace: "nowrap" }}
+              onClick={() => {
+                setFilter((p) => ({ ...p, fromDate: "", toDate: "" }));
+                resetPage();
+              }}
+              title="Clear date range"
+            >
+              ✕ Clear dates
+            </button>
+          )}
+        </div>
+        <span
+          style={{
+            fontSize: 12,
+            color: "var(--text-muted)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {filtered.length} records
+        </span>
       </div>
 
+      {/* TABLE */}
       <div className="card">
         <div className="table-wrapper">
           <table>
@@ -198,7 +527,7 @@ const handleDelete = async (id) => {
                 <th>Vendor</th>
                 <th>Invoice No.</th>
                 <th>Invoice Date</th>
-                <th style={{ color: 'var(--accent)' }}>📅 Date of Receipt</th>
+                <th>📅 Date of Receipt</th>
                 <th>Days Pending</th>
                 <th>Department</th>
                 <th>Amount (₹)</th>
@@ -208,109 +537,544 @@ const handleDelete = async (id) => {
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={10} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No invoices found</td></tr>
-              ) : filtered.map(inv => {
-                const days = getDaysPending(inv.dateOfReceipt);
-                const ageClass = getAgeClass(days);
-                return (
-                  <tr key={inv.id}>
-                    <td>
-                      <div className="actions-btn">
-                        <button className="edit-btn" onClick={() => {
-                          setShowForm(true);
-                          setAction({ edit: true, id: inv.id })
-                        }
-                        } >✏️</button>
-                        <button className="delete-btn" onClick={() => handleDelete(inv.id)} >🗑️</button>
-                      </div>
-                    </td>
-                    <td>{inv.id}</td>
-                    <td style={{ fontWeight: 600 }} className="space-remove">{inv.vendor}</td>
-                    <td style={{ color: 'var(--text-muted)' }}>{inv.invoiceNo}</td>
-                    <td>{inv.invoiceDate}</td>
-                    <td><span className="receipt-date">{inv.dateOfReceipt}</span></td>
-                    <td>
-                      <span className={`age-chip ${ageClass}`}>{days}d</span>
-                    </td>
-                    <td>{inv.department}</td>
-                    <td className="amount-cell">₹{inv.amount.toLocaleString("en-IN")}</td>
-                    <td style={{ color: 'var(--text-muted)' }}>{inv.uploadedBy}</td>
-                    <td><span className={`badge ${STATUS_COLORS[inv.status] || 'badge-gray'}`}>{inv.status}</span></td>
-                  </tr>
-                );
-              })}
+                <tr>
+                  <td
+                    colSpan={11}
+                    style={{ textAlign: "center", padding: "40px" }}
+                  >
+                    No invoices found
+                  </td>
+                </tr>
+              ) : (
+                paginate(filtered).map((inv) => {
+                  const days = getDaysPending(inv.dateOfReceipt);
+                  const ageClass = getAgeClass(days);
+                  const rowDocs = getRowDocs(inv);
+
+                  return (
+                    <tr key={inv.id}>
+                      <td>
+                        <div className="actions-btn">
+                          {/* Edit */}
+                          <button
+                            className="edit-btn"
+                            onClick={() => handleEdit(inv.id)}
+                            title="Edit invoice"
+                          >
+                            ✏️
+                          </button>
+
+                          <button
+                            className="download-doc-btn"
+                            title={
+                              rowDocs.length > 1
+                                ? `Download ${rowDocs.length} documents as ZIP`
+                                : `Download ${friendlyName(rowDocs[0])}`
+                            }
+                            onClick={() => handleDownloadZip(inv.id)}
+                          >
+                            <svg
+                              width="11"
+                              height="11"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                              <polyline points="7 10 12 15 17 10" />
+                              <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                            {rowDocs.length > 0 && (
+                              <span className="doc-count-badge">
+                                {rowDocs.length}
+                              </span>
+                            )}
+                          </button>
+
+                          {/* Delete */}
+                          <button
+                            className="delete-btn"
+                            onClick={() => handleDelete(inv.id)}
+                            title="Delete invoice"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
+                      <td>{inv.id}</td>
+                      <td style={{ fontWeight: 600 }}>{inv.vendor}</td>
+                      <td>{inv.invoiceNo}</td>
+                      <td>{inv.invoiceDate}</td>
+                      <td>
+                        {inv.dateOfReceipt?.split("T")[0] || inv.dateOfReceipt}
+                      </td>
+                      <td>
+                        <span className={`age-chip ${ageClass}`}>{days}d</span>
+                      </td>
+                      <td>{inv.department}</td>
+                      <td>₹{Number(inv.amount).toLocaleString("en-IN")}</td>
+                      <td>{inv.uploadedBy}</td>
+                      <td>
+                        <span
+                          className={`badge ${STATUS_COLORS[inv.status] || "badge-gray"}`}
+                        >
+                          {inv.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={page}
+          totalItems={filtered.length}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          pageSizeOptions={[10, 20, 50]}
+          onPageSizeChange={setPageSize}
+        />
       </div>
 
-      {/* Submit Invoice Modal */}
+      {/* ── MODAL ───────────────────────────────────────────────── */}
       {showForm && (
-        <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={closeModal}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               {action?.edit ? "Edit Invoice" : "Submit New Invoice"}
-              <button className="close-btn" onClick={() => setShowForm(false)}>✕</button>
+              <button className="close-btn" onClick={closeModal}>
+                ✕
+              </button>
             </div>
+
             <div className="modal-body">
-              <div className="alert alert-info">
-                📌 Date of Receipt will be auto-captured as today's date and cannot be modified.
-              </div>
               <div className="form-grid form-grid-2">
+                {/* Vendor */}
                 <div className="form-group">
-                  <label className="form-label">Vendor Name <span className="required">*</span></label>
-                  <input name="vendor" className="form-control" value={form.vendor} onChange={handleChange} placeholder="e.g. TechCorp Solutions" list="vendor-list" />
-                  <datalist id="vendor-list">{VENDORS.map(v => <option key={v} value={v} />)}</datalist>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Invoice Number <span className="required">*</span></label>
-                  <input name="invoiceNo" className="form-control" value={form.invoiceNo} onChange={handleChange} placeholder="e.g. TC-8821" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Invoice Date <span className="required">*</span></label>
-                  <input type="date" name="invoiceDate" className="form-control" value={form.invoiceDate} onChange={handleChange} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Invoice Amount (₹) <span className="required">*</span></label>
-                  <input type="number" name="amount" className="form-control" value={form.amount} onChange={handleChange} placeholder="e.g. 50000" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Department <span className="required">*</span></label>
-                  <select name="department" className="form-control" value={form.department} onChange={handleChange}>
-                    <option value="">-- Select Department --</option>
-                    {DEPARTMENTS.map(d => <option key={d}>{d}</option>)}
+                  <label className="form-label">Vendor Name *</label>
+
+                  <select
+                    name="vendor"
+                    className="form-control"
+                    value={form.vendor}
+                    onChange={(e) => {
+                      const selectedVendor = vendors.find(
+                        (v) => v.name === e.target.value,
+                      );
+
+                      setForm((prev) => ({
+                        ...prev,
+                        vendor: e.target.value,
+                        vendorEmail: selectedVendor?.email || "", // auto set
+                      }));
+                    }}
+                  >
+                    <option value="">-- Select Vendor --</option>
+
+                    {vendors.map((v) => (
+                      <option key={v.id} value={v.name}>
+                        {v.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
+
+                {/* Vendor Email — recipient of payment-processed notification */}
                 <div className="form-group">
-                  <label className="form-label">Uploaded By <span className="required">*</span></label>
-                  <input name="uploadedBy" className="form-control" value={form.uploadedBy} onChange={handleChange} placeholder="Your name" />
+                  <label className="form-label">Vendor Email</label>
+                  <input
+                    type="email"
+                    name="vendorEmail"
+                    className="form-control"
+                    placeholder="vendor@example.com"
+                    value={form.vendorEmail}
+                    onChange={handleChange}
+                  />
+                  {form.vendor && !form.vendorEmail && (
+                    <p style={{ fontSize: 11, color: "var(--danger)", marginTop: 3 }}>
+                      ⚠️ No email on record for this vendor — the payment confirmation email cannot be sent unless you enter one.
+                    </p>
+                  )}
                 </div>
+
+                {/* Invoice No */}
+                <div className="form-group">
+                  <label className="form-label">Invoice Number *</label>
+                  <input
+                    name="invoiceNo"
+                    className="form-control"
+                    placeholder="e.g. TC-8821"
+                    value={form.invoiceNo}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                {/* Invoice Date */}
+                <div className="form-group">
+                  <label className="form-label">Invoice Date *</label>
+                  <input
+                    type="date"
+                    name="invoiceDate"
+                    className="form-control"
+                    value={form.invoiceDate}
+                    // max = today, min = 365 days ago
+                    max={new Date().toISOString().split("T")[0]}
+                    min={(() => {
+                      const d = new Date();
+                      d.setFullYear(d.getFullYear() - 1);
+                      return d.toISOString().split("T")[0];
+                    })()}
+                    onChange={(e) => {
+                      const chosen = e.target.value;
+                      const minDate = (() => {
+                        const d = new Date();
+                        d.setFullYear(d.getFullYear() - 1);
+                        return d.toISOString().split("T")[0];
+                      })();
+                      if (chosen < minDate) {
+                        toast.error(
+                          `Invoice date cannot be older than 365 days. Earliest allowed: ${minDate}`,
+                        );
+                        return;
+                      }
+                      if (chosen > new Date().toISOString().split("T")[0]) {
+                        toast.error("Invoice date cannot be a future date.");
+                        return;
+                      }
+                      handleChange(e);
+                    }}
+                  />
+                  <p
+                    style={{
+                      fontSize: 11,
+                      color: "var(--text-muted)",
+                      marginTop: 3,
+                    }}
+                  >
+                    Invoices older than 365 days cannot be submitted.
+                  </p>
+                </div>
+
+                {/* Amount */}
+                <div className="form-group">
+                  <label className="form-label">Invoice Amount *</label>
+                  <input
+                    type="number"
+                    name="amount"
+                    className="form-control"
+                    placeholder="e.g. 50000"
+                    value={form.amount}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                {/* Department */}
+                <div className="form-group">
+                  <label className="form-label">Department *</label>
+                  {/* Issue 3: non-admins see their dept as read-only */}
+                  {!isAdmin && user?.department ? (
+                    <input
+                      className="form-control"
+                      value={user.department}
+                      readOnly
+                      style={{
+                        background: "#f8fafc",
+                        color: "#475569",
+                        cursor: "not-allowed",
+                      }}
+                    />
+                  ) : (
+                    <select
+                      name="department"
+                      className="form-control"
+                      value={form.department}
+                      onChange={handleChange}
+                    >
+                      <option value="">-- Select Department --</option>
+                      {DEPARTMENTS.map((d) => (
+                        <option key={d}>{d}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                {/* Uploaded By */}
+                <div className="form-group">
+                  <label className="form-label">Uploaded By</label>
+                  {/* Issue 3: always shows logged-in user name, read-only */}
+                  <input
+                    name="uploadedBy"
+                    className="form-control"
+                    value={user?.name || form.uploadedBy || ""}
+                    readOnly
+                    style={{
+                      background: "#f8fafc",
+                      color: "#475569",
+                      cursor: "not-allowed",
+                    }}
+                  />
+                </div>
+
+                {/* Due Date */}
                 <div className="form-group">
                   <label className="form-label">Due Date</label>
-                  <input type="date" name="dueDate" className="form-control" value={form.dueDate} onChange={handleChange} />
+                  <input
+                    type="date"
+                    name="dueDate"
+                    className="form-control"
+                    value={form.dueDate}
+                    onChange={handleChange}
+                  />
                 </div>
+
+                {/* Tax */}
+                {/* Tax Type — dropdown, not free text */}
                 <div className="form-group">
-                  <label className="form-label">Tax Details</label>
-                  <input name="taxDetails" className="form-control" value={form.taxDetails} onChange={handleChange} placeholder="e.g. GST 18%" />
+                  <label className="form-label">Tax Type</label>
+                  <select
+                    name="taxDetails"
+                    className="form-control"
+                    value={form.taxDetails}
+                    onChange={handleChange}
+                  >
+                    <option value="">— Select Tax Type —</option>
+                    {TAX_TYPE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                  {/* {editTarget.taxDetails && editForm.taxDetails !== editTarget.taxDetails && (
+                    <span style={{ fontSize: 11, color: "var(--warning)" }}>
+                      Was: {editTarget.taxDetails}
+                    </span>
+                  )} */}
                 </div>
+                {/* <div className="form-group">
+                  <label className="form-label">Tax Details</label>
+                  <input
+                    name="taxDetails"
+                    className="form-control"
+                    placeholder="e.g. GST 18%"
+                    value={form.taxDetails}
+                    onChange={handleChange}
+                  />
+                </div> */}
               </div>
+
+              {/* ── EXISTING DOCUMENTS (edit mode only) ──────────── */}
+              {action.edit && existingDocs.length > 0 && (
+                <div className="form-group" style={{ marginTop: 16 }}>
+                  <label className="form-label">
+                    Existing Documents
+                    <span
+                      style={{
+                        fontWeight: 400,
+                        color: "var(--text-muted)",
+                        marginLeft: 6,
+                      }}
+                    >
+                      (click ✕ to mark for removal)
+                    </span>
+                  </label>
+                  <div className="doc-chip-list">
+                    {existingDocs.map((doc) => {
+                      const markedForRemoval = docsToRemove.includes(doc);
+                      return (
+                        <div
+                          key={doc}
+                          className={`doc-chip ${markedForRemoval ? "doc-chip-removed" : "doc-chip-existing"}`}
+                        >
+                          {/* Download existing doc */}
+                          <button
+                            className="doc-chip-download"
+                            onClick={() => handleDownloadDoc(action.id, doc)}
+                            title={`Download ${friendlyName(doc)}`}
+                            type="button"
+                          >
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                              <polyline points="7 10 12 15 17 10" />
+                              <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                          </button>
+
+                          <span className="doc-chip-name" title={doc}>
+                            📄 {friendlyName(doc)}
+                          </span>
+
+                          {/* Toggle removal */}
+                          <button
+                            className="doc-chip-remove"
+                            onClick={() => toggleRemoveDoc(doc)}
+                            title={
+                              markedForRemoval
+                                ? "Undo removal"
+                                : "Remove this document"
+                            }
+                            type="button"
+                          >
+                            {markedForRemoval ? "↩" : "✕"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {docsToRemove.length > 0 && (
+                    <p className="doc-remove-warning">
+                      ⚠ {docsToRemove.length} document
+                      {docsToRemove.length > 1 ? "s" : ""} will be removed on
+                      save.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* ── NEW FILE PICKER ───────────────────────────────── */}
               <div className="form-group" style={{ marginTop: 14 }}>
-                <label className="form-label">Supporting Document</label>
-                <input type="file" className="form-control" accept=".pdf,.jpg,.png" />
+                <label className="form-label">
+                  {action.edit ? "Add More Documents" : "Supporting Documents"}
+                </label>
+                <input
+                  type="file"
+                  multiple
+                  accept="application/pdf"
+                  className="form-control"
+                  onChange={(e) => {
+                    const selected = Array.from(e.target.files);
+                    const valid = selected.filter(
+                      (f) => f.type === "application/pdf",
+                    );
+                    if (valid.length !== selected.length)
+                      toast.error("Only PDF files allowed");
+                    setNewFiles((prev) => {
+                      // Avoid duplicate filenames
+                      const existingNames = new Set(prev.map((f) => f.name));
+                      return [
+                        ...prev,
+                        ...valid.filter((f) => !existingNames.has(f.name)),
+                      ];
+                    });
+                    // Reset input so same file can be re-picked after removal
+                    e.target.value = "";
+                  }}
+                />
+                <p
+                  style={{
+                    fontSize: 11,
+                    color: "var(--text-muted)",
+                    marginTop: 4,
+                  }}
+                >
+                  Only PDF files · Multiple allowed
+                </p>
+
+                {/* Chips for newly picked files */}
+                {newFiles.length > 0 && (
+                  <div className="doc-chip-list" style={{ marginTop: 8 }}>
+                    {newFiles.map((file, idx) => (
+                      <div key={idx} className="doc-chip doc-chip-new">
+                        <span className="doc-chip-name" title={file.name}>
+                          📄 {file.name}
+                          <span
+                            style={{
+                              fontSize: 10,
+                              opacity: 0.7,
+                              marginLeft: 4,
+                            }}
+                          >
+                            ({(file.size / 1024).toFixed(0)} KB)
+                          </span>
+                        </span>
+                        <button
+                          className="doc-chip-remove"
+                          onClick={() => removeNewFile(idx)}
+                          title="Remove this file"
+                          type="button"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
+
+              {/* REMARKS */}
               <div className="form-group" style={{ marginTop: 14 }}>
                 <label className="form-label">Remarks</label>
-                <textarea name="remarks" className="form-control" value={form.remarks} onChange={handleChange} placeholder="Any additional notes..." rows={3} />
+                <textarea
+                  name="remarks"
+                  className="form-control"
+                  value={form.remarks}
+                  onChange={handleChange}
+                  placeholder="Any additional notes..."
+                  rows={3}
+                />
               </div>
-              <div style={{ marginTop: 14, padding: '10px 14px', background: '#f8fafc', borderRadius: 8, border: '1px solid var(--border)' }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>📅 Date of Receipt: </span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{new Date().toISOString().split("T")[0]}</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>(Auto-captured · Non-editable)</span>
+
+              {/* Date of receipt info */}
+              <div
+                style={{
+                  marginTop: 14,
+                  padding: "10px 14px",
+                  background: "#f8fafc",
+                  borderRadius: 8,
+                  border: "1px solid var(--border)",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  📅 Date of Receipt:{" "}
+                </span>
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: "var(--accent)",
+                  }}
+                >
+                  {new Date().toISOString().split("T")[0]}
+                </span>
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: "var(--text-muted)",
+                    marginLeft: 8,
+                  }}
+                >
+                  (Auto-captured · Non-editable)
+                </span>
               </div>
             </div>
+
+            {/* FOOTER */}
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setShowForm(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSubmit}> {action?.edit ? "Update Invoice" : "Submit Invoice"}</button>
+              <button className="btn btn-outline" onClick={closeModal}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={handleSubmit}>
+                {action?.edit ? "Update Invoice" : "Submit Invoice"}
+              </button>
             </div>
           </div>
         </div>

@@ -1,63 +1,57 @@
-// session expired
-
 import axios from "axios";
-// import { decryptData } from "../page/utils/encrypt";
+import { decryptData } from "../utils/encrypt";
+
 const baseURL = import.meta.env.VITE_API_BASE_URL;
+
 const API = axios.create({
-    baseURL,
-    withCredentials: true,
-    headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-cache",
-    },
-    //  withCredentials: true, // <--- important for cookies
+  baseURL,
+  withCredentials: true,
+  headers: {
+    "Content-Type": "application/json",
+    "Cache-Control": "no-cache",
+  },
 });
 
-// Request interceptor - set Authorization header
+// Request interceptor — attach Bearer token from localStorage
 API.interceptors.request.use(
-    (config) => {
-        localStorage.setItem("authToken", "faketoken123");
-        const encryptedToken = localStorage.getItem("authToken");
+  (config) => {
+    // Get encrypted token from localStorage
+    const encryptedToken = localStorage.getItem("authToken");
 
-        if (!encryptedToken) {
-            return config; // no token found skip
-        }
+    // Decrypt token
+    const token = decryptData(encryptedToken);
 
-        let local_token;
-        try {
-            //   local_token = decryptData(encryptedToken);
-            local_token = encryptedToken;
-        } catch {
-            return config; // decrypt error occurred, skip
-        }
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
 
-        if (local_token) {
-            config.headers.Authorization = `Bearer ${local_token}`;
-        }
-
-        return config;
-    },
-    (error) => Promise.reject(error),
+    return config;
+  },
+  (error) => Promise.reject(error)
 );
-
-// Response interceptor - handle expired token
+// Response interceptor — ONLY redirect on explicit auth rejection (401/403)
+// Never redirect on network errors or 5xx — that would log users out unfairly
 API.interceptors.response.use(
-    (response) => response,
-    (error) => {
-        const response = error.response;
+  (response) => response,
+  (error) => {
+    const status = error.response?.status;
+    const message = error.response?.data?.message;
 
-        if (
-            response &&
-            response.data &&
-            response.data.message === "Token expired or invalid"
-            // response.status === 401 // Unauthorized
-        ) {
-            localStorage.removeItem("authToken");
-            window.location.href = "/"; // redirect to login
-        }
+    // Only 401 (invalid/expired token) clears the session.
+    // 403 = permission denied — user is still authenticated, do NOT log them out.
+    const isTokenInvalid =
+      status === 401 ||
+      message === "Token expired or invalid";
 
-        return Promise.reject(error);
-    },
+    if (isTokenInvalid) {
+      localStorage.removeItem("authToken");
+      if (window.location.pathname !== "/") {
+        window.location.href = "/"; // Redirect to login page
+      }
+    }
+
+    return Promise.reject(error);
+  },
 );
 
 export default API;
