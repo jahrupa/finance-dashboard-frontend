@@ -75,13 +75,13 @@ const ALL_PAGES = [
     short: "Logs",
     path: "/activity-logs",
   },
-  {
-    id: "user-wise-data",
-    label: "User-Wise Data",
-    icon: "📊",
-    short: "By User",
-    path: "/user-wise-data",
-  },
+  // {
+  //   id: "user-wise-data",
+  //   label: "User-Wise Data",
+  //   icon: "📊",
+  //   short: "By User",
+  //   path: "/user-wise-data",
+  // },
 ];
 
 const PATH_TO_ID = Object.fromEntries(ALL_PAGES.map((p) => [p.path, p.id]));
